@@ -60,6 +60,12 @@ class ParsedArgs:
     log_file_path:str | None = None
     logfile_explicitly_provided:bool = False
     workspace_mode:str | None = None
+    probe_conversations:int = 1
+    probe_include_raw_bodies:bool = False
+    messages_unread_only:bool = False
+    probe_watch_seconds:int = 0
+    conversation_id:str | None = None
+    message_text:str | None = None
 
 
 def _warn_unpatched_nodriver() -> None:
@@ -143,6 +149,10 @@ def help_text(*, executable:str | None = None, language:str | None = None) -> st
                                     "geändert" gelten und neu veröffentlicht werden.
               create-config - Erstellt eine neue Standard-Konfigurationsdatei, falls noch nicht vorhanden
               diagnose - Diagnostiziert Browser-Verbindungsprobleme und zeigt Troubleshooting-Informationen
+              messages - Lädt die Unterhaltungen aus dem Nachrichten-Postfach als YAML-Dateien herunter
+              reply    - Sendet eine Antwort in eine Unterhaltung (öffentlich wirksam)
+              mark-read - Markiert eine Unterhaltung als gelesen
+              messages-probe - Zeichnet die Netzwerkaufrufe des Nachrichten-Postfachs auf (Diagnose, ändert nichts)
               status   - Zeigt Anzeigenstatus und APR-Vorschau an
               --
               help     - Zeigt diese Hilfe an (Standardbefehl)
@@ -178,6 +188,15 @@ def help_text(*, executable:str | None = None, language:str | None = None) -> st
                     * all: Stellt alle passenden Anzeigen um
                     * <id(s)>: Gibt bestimmte Anzeigen-IDs an, z. B. "--ads=1,2,3"
                     * Hinweis: Anzeigen, die bereits im Zielzustand sind, werden übersprungen.
+              --unread (messages) - Lädt den Verlauf nur für Unterhaltungen mit ungelesenen Nachrichten
+              --conversation=<ID> (reply, mark-read) - ID der Unterhaltung; immer explizit anzugeben
+              --text=<TEXT> (reply) - Text der Antwort. Enthält er etwas, das wie eine Telefonnummer aussieht,
+                    wird nicht gesendet
+              --conversations=<N> (messages-probe) - Anzahl der zu öffnenden Unterhaltungen (STANDARD: 1)
+              --watch=<SEKUNDEN> (messages-probe) - Zeichnet nur auf und wartet, während ein Mensch den Browser bedient;
+                    damit lassen sich Aktionen erfassen, die der Bot nicht selbst ausführen soll (z. B. Senden)
+              --include-raw-bodies (messages-probe) - Schreibt zusätzlich die ungeschwärzten Antwortinhalte;
+                    diese enthalten private Nachrichten und dürfen nicht weitergegeben werden
               --force           - Alias für '--ads=all'
               --keep-old        - Verhindert das Löschen alter Anzeigen bei erneuter Veröffentlichung
               --preserve-local-settings - Erzwingt das Beibehalten lokaler Einstellungen bei erneutem Download (überschreibt config-Wert false)
@@ -207,6 +226,10 @@ def help_text(*, executable:str | None = None, language:str | None = None) -> st
                                 use this after changing config.yaml/ad_defaults to avoid every ad being marked "changed" and republished
           create-config - creates a new default configuration file if one does not exist
           diagnose - diagnoses browser connection issues and shows troubleshooting information
+          messages - downloads the message box conversations as YAML files
+          reply    - sends a reply into a conversation (publicly visible)
+          mark-read - marks a conversation as read
+          messages-probe - records the network calls made by the message box (diagnostic, changes nothing)
           status   - shows ad status and APR preview details
           --
           help     - displays this help (default command)
@@ -241,6 +264,14 @@ def help_text(*, executable:str | None = None, language:str | None = None) -> st
                 * all: switch all eligible ads
                 * <id(s)>: specify ad IDs, e.g. "--ads=1,2,3"
                 * Note: ads already in the target state are skipped.
+          --unread (messages) - only fetch the history of conversations with unread messages
+          --conversation=<ID> (reply, mark-read) - id of the conversation; always required explicitly
+          --text=<TEXT> (reply) - the reply text. Refused if it looks like it contains a phone number
+          --conversations=<N> (messages-probe) - how many conversations to open (DEFAULT: 1)
+          --watch=<SECONDS> (messages-probe) - only record and wait while a human drives the browser;
+                captures actions the bot should not perform itself (e.g. sending a message)
+          --include-raw-bodies (messages-probe) - additionally write the unredacted response bodies;
+                these contain private messages and must not be shared
           --force           - alias for '--ads=all'
           --keep-old        - don't delete old ads on republication
           --preserve-local-settings - force-enable preservation of local-only settings on re-download (overrides config value of false)
@@ -257,6 +288,18 @@ def show_help() -> None:
     print(help_text())
 
 
+def _positive_int(value:str, flag:str, unit:str) -> int:
+    """Parse a positive integer CLI argument, exiting with a clear message if invalid."""
+    try:
+        parsed = int(value)
+    except ValueError:
+        parsed = 0
+    if parsed < 1:
+        LOG.error("Invalid %s '%s'. Expected %s.", flag, value, unit)
+        sys.exit(2)
+    return parsed
+
+
 def parse_args(args:Sequence[str]) -> ParsedArgs:
     parsed = ParsedArgs()
     help_requested = False
@@ -264,7 +307,11 @@ def parse_args(args:Sequence[str]) -> ParsedArgs:
         options, arguments = getopt.gnu_getopt(
             list(args)[1:],
             "hv",
-            ["ads=", "config=", "force", "help", "keep-old", "logfile=", "lang=", "preserve-local-settings", "verbose", "workspace-mode="],
+            [
+                "ads=", "config=", "force", "help", "include-raw-bodies", "keep-old", "logfile=", "lang=",
+                "conversation=", "conversations=", "preserve-local-settings", "text=", "unread", "verbose", "watch=",
+                "workspace-mode=",
+            ],
         )
     except getopt.error as ex:
         LOG.error(ex.msg)
@@ -296,6 +343,18 @@ def parse_args(args:Sequence[str]) -> ParsedArgs:
                 parsed.ads_selector_explicit = True
             case "--keep-old":
                 parsed.keep_old_ads = True
+            case "--conversations":
+                parsed.probe_conversations = _positive_int(value, "--conversations", "a positive integer")
+            case "--include-raw-bodies":
+                parsed.probe_include_raw_bodies = True
+            case "--unread":
+                parsed.messages_unread_only = True
+            case "--conversation":
+                parsed.conversation_id = value.strip()
+            case "--text":
+                parsed.message_text = value
+            case "--watch":
+                parsed.probe_watch_seconds = _positive_int(value, "--watch", "a number of seconds")
             case "--preserve-local-settings":
                 parsed.preserve_local_settings = True
             case "--lang":

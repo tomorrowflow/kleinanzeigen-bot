@@ -696,6 +696,22 @@
       "title": "LoginConfig",
       "type": "object"
     },
+    "MessagesConfig": {
+      "properties": {
+        "dir": {
+          "default": "messages",
+          "description": "directory where synced conversations are written. The default literal 'messages' uses workspace-specific resolution; custom relative paths are resolved against the config file location",
+          "examples": [
+            "\"messages\"",
+            "\"./conversations\""
+          ],
+          "title": "Dir",
+          "type": "string"
+        }
+      },
+      "title": "MessagesConfig",
+      "type": "object"
+    },
     "PublishingConfig": {
       "properties": {
         "delete_old_ads": {
@@ -953,6 +969,10 @@
     },
     "download": {
       "$ref": "#/$defs/DownloadConfig"
+    },
+    "messages": {
+      "$ref": "#/$defs/MessagesConfig",
+      "description": "Message box sync configuration"
     },
     "publishing": {
       "$ref": "#/$defs/PublishingConfig"

@@ -162,6 +162,16 @@ download:
   preserve_local_settings: true
 
 # ################################################################################
+# Message box sync configuration
+messages:
+
+  # directory where synced conversations are written. The default literal 'messages' uses workspace-specific resolution; custom relative paths are resolved against the config file location
+  # Examples (choose one):
+  #   • "messages"
+  #   • "./conversations"
+  dir: messages
+
+# ################################################################################
 publishing:
 
   # when to delete old versions of republished ads

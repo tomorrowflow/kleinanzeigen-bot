@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 
 import certifi
 
-from . import ad_loading, ad_status, delete_flow, download_flow, extend_flow, reserve_flow
+from . import ad_loading, ad_status, delete_flow, download_flow, extend_flow, messagebox, messagebox_probe, messages_flow, reserve_flow
 from . import login_flow as _login_flow
 from . import publishing_workflow as _publishing_workflow
 from . import runtime_config as _runtime_config
@@ -33,6 +33,16 @@ if TYPE_CHECKING:
 # W0406: possibly a bug, see https://github.com/PyCQA/pylint/issues/3933
 
 LOG:Final[_loggers.Logger] = _loggers.get_logger(__name__)
+
+
+#: Values that mean "no password was configured". Submitting one of these is a
+#: failed login attempt against a live account, so it must never be attempted.
+_PLACEHOLDER_PASSWORDS:Final[frozenset[str]] = frozenset({"changeme", "not-configured"})
+
+
+def _is_placeholder_password(password:str | None) -> bool:
+    """Whether the configured password is absent or one of the known placeholders."""
+    return not password or not password.strip() or password.strip() in _PLACEHOLDER_PASSWORDS
 
 
 class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
@@ -96,6 +106,12 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
         self._ads_selector_explicit = parsed.ads_selector_explicit
         self.keep_old_ads = parsed.keep_old_ads
         self._preserve_local_settings = parsed.preserve_local_settings
+        self._probe_conversations = parsed.probe_conversations
+        self._probe_include_raw_bodies = parsed.probe_include_raw_bodies
+        self._messages_unread_only = parsed.messages_unread_only
+        self._probe_watch_seconds = parsed.probe_watch_seconds
+        self._conversation_id = parsed.conversation_id
+        self._message_text = parsed.message_text
         self._config_arg = parsed.config_arg
         self._workspace_mode_arg = cast(_xdg_paths.InstallationMode, parsed.workspace_mode) if parsed.workspace_mode else None
         self._logfile_arg = parsed.logfile_arg
@@ -152,6 +168,14 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
                     await self._handle_reserve_or_activate("activate")
                 case "download":
                     await self._handle_download()
+                case "messages":
+                    await self._handle_messages()
+                case "messages-probe":
+                    await self._handle_messages_probe()
+                case "reply":
+                    await self._handle_reply()
+                case "mark-read":
+                    await self._handle_mark_read()
                 case _:
                     LOG.error("Unknown command: %s", self.command)
                     sys.exit(2)
@@ -387,6 +411,97 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
             ads_selector = self.ads_selector,
             load_ads_func = self.load_ads,
             root_url = self.root_url,
+        )
+
+    async def _handle_messages(self) -> None:
+        """Sync the message box to YAML files."""
+        self._bootstrap_runtime()
+        self._check_for_updates()
+        await self._open_logged_in_browser()
+        messages_dir = messages_flow.resolve_messages_dir(
+            self.config.messages.dir,
+            self.config_file_path,
+            self._workspace_or_raise(),
+        )
+        LOG.info("Messages directory: %s", messages_dir)
+        await messages_flow.sync_messages(
+            self,
+            root_url = self.root_url,
+            messages_dir = messages_dir,
+            unread_only = self._messages_unread_only,
+        )
+
+    def _require_conversation_id(self) -> str:
+        """Conversation targeting is never implicit - several threads share one ad."""
+        conversation_id:str | None = self._conversation_id
+        if not conversation_id:
+            LOG.error("--conversation=<id> is required. Run 'messages' first and take the id from the synced YAML file.")
+            sys.exit(2)
+        return conversation_id
+
+    async def _handle_reply(self) -> None:
+        """Send a reply into one conversation."""
+        conversation_id = self._require_conversation_id()
+        if not self._message_text or not self._message_text.strip():
+            LOG.error("--text=<message> is required and must not be empty.")
+            sys.exit(2)
+
+        self._bootstrap_runtime()
+        await self._open_logged_in_browser()
+        try:
+            await messages_flow.send_reply(
+                self,
+                root_url = self.root_url,
+                conversation_id = conversation_id,
+                text = self._message_text,
+            )
+        except messagebox.PhoneNumberInMessageError as ex:
+            LOG.error("%s", ex)
+            sys.exit(2)
+
+    async def _handle_mark_read(self) -> None:
+        """Mark one conversation as read."""
+        conversation_id = self._require_conversation_id()
+        self._bootstrap_runtime()
+        await self._open_logged_in_browser()
+        await messages_flow.mark_conversations_read(
+            self,
+            root_url = self.root_url,
+            conversation_ids = [conversation_id],
+        )
+
+    async def _handle_messages_probe(self) -> None:
+        """Record the message box network traffic so a client can be written against it.
+
+        Logs in normally when credentials are configured, so a challenge on the login
+        page pauses for a human like it does everywhere else. Without real credentials
+        it falls back to whatever session the profile already holds, rather than
+        submitting the placeholder password and burning a failed login attempt.
+        """
+        self._bootstrap_runtime()
+
+        if _is_placeholder_password(self.config.login.password):
+            await self.create_browser_session()
+            await self.web_open(self.root_url)
+            await _login_flow.click_gdpr_banner(self)
+            login_state = await self.get_login_state(capture_diagnostics = False)
+            if not login_state.is_logged_in:
+                LOG.error(
+                    "Not logged in (%s) and no password configured, so signing in is not possible. "
+                    "Set login.password (or KLEINANZEIGEN_PASSWORD), or log in once in this browser profile.",
+                    login_state.reason.name,
+                )
+                sys.exit(2)
+        else:
+            await self._open_logged_in_browser()
+
+        await messagebox_probe.probe_messagebox(
+            self,
+            root_url = self.root_url,
+            output_dir = self._diagnostics_output_dir(),
+            conversations = self._probe_conversations,
+            include_raw_bodies = self._probe_include_raw_bodies,
+            watch_seconds = self._probe_watch_seconds,
         )
 
     def load_ads(self, *, ignore_inactive:bool = True, exclude_ads_with_id:bool = True) -> list[tuple[str, Ad, dict[str, Any]]]:

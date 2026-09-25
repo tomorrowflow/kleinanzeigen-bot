@@ -35,9 +35,75 @@ kleinanzeigen_bot/cli.py:
     "Unknown command: %s": "Unbekannter Befehl: %s"
     "More than one command given: %s": "Mehr als ein Befehl angegeben: %s"
     "Invalid --workspace-mode '%s'. Use 'portable' or 'xdg'.": "Ungültiger --workspace-mode '%s'. Verwenden Sie 'portable' oder 'xdg'."
+  _positive_int:
+    "Invalid %s '%s'. Expected %s.": "Ungültiger Wert für %s: '%s'. Erwartet wird %s."
   _warn_unpatched_nodriver:
     ? "nodriver CDP re-attach patch not found: installed nodriver may miss the flat-mode fix. Plain pip installs skip the PDM post_install hook; run `pdm install` from a source checkout or `python scripts/fix_nodriver.py` from the repository. Symptom: repeated `Re-attaching CDP session after -32601`."
     : "nodriver CDP Re-Attach-Patch nicht gefunden: installiertes nodriver hat möglicherweise nicht den Flat-Mode-Fix. Reine pip-Installationen überspringen den PDM post_install-Hook; führen Sie `pdm install` in einem Quell-Checkout aus oder `python scripts/fix_nodriver.py` aus dem Repository. Symptom: wiederholtes `Re-attaching CDP session after -32601`."
+
+#################################################
+kleinanzeigen_bot/messagebox.py:
+#################################################
+  _decode_body:
+    "Empty response from the message box API": "Leere Antwort der Postfach-API"
+    "Could not parse the message box response: %s": "Antwort der Postfach-API konnte nicht gelesen werden: %s"
+  _get:
+    "Timed out requesting %s": "Zeitüberschreitung bei der Anfrage an %s"
+  _post:
+    "Timed out posting to %s": "Zeitüberschreitung beim Senden an %s"
+  send_message:
+    "The message looks like it contains a phone number, so it was not sent. Send it via the website if that is intended.": "Die Nachricht enthält offenbar eine Telefonnummer und wurde daher nicht gesendet. Bitte über die Website senden, falls das beabsichtigt ist."
+  fetch_access_token:
+    "Timed out requesting the message box access token": "Zeitüberschreitung beim Abruf des Postfach-Zugriffstokens"
+    "No access token returned - the session is probably not logged in": "Kein Zugriffstoken erhalten - die Sitzung ist vermutlich nicht angemeldet"
+  fetch_user_id:
+    "Timed out requesting the message box user context": "Zeitüberschreitung beim Abruf des Postfach-Benutzerkontexts"
+    "Message box user context contained no user id": "Der Postfach-Benutzerkontext enthielt keine Benutzer-ID"
+    "Unexpected user id in the message box context: %r": "Unerwartete Benutzer-ID im Postfach-Kontext: %r"
+  list_conversations:
+    "Unexpected conversation list payload: %s": "Unerwartete Antwort für die Unterhaltungsliste: %s"
+  get_conversation:
+    "Unexpected conversation payload: %s": "Unerwartete Antwort für die Unterhaltung: %s"
+  fetch_conversations:
+    "Conversation list page %s carried no conversations array": "Seite %s der Unterhaltungsliste enthielt kein conversations-Array"
+    "Stopped paginating conversations after %s pages": "Seitenweiser Abruf der Unterhaltungen nach %s Seiten beendet"
+
+#################################################
+kleinanzeigen_bot/messages_flow.py:
+#################################################
+  preserve_existing_history:
+    "Could not read existing conversation file %s: %s": "Vorhandene Unterhaltungsdatei %s konnte nicht gelesen werden: %s"
+  send_reply:
+    "Sending reply to conversation %s...": "Antwort wird an Unterhaltung %s gesendet..."
+    "DONE: reply sent.": "FERTIG: Antwort gesendet."
+  mark_conversations_read:
+    "conversation": "Unterhaltung"
+    "Marking %s as read...": "%s werden als gelesen markiert..."
+    "DONE: marked as read.": "FERTIG: als gelesen markiert."
+  sync_messages:
+    "conversation": "Unterhaltung"
+    "Fetching conversations...": "Unterhaltungen werden abgerufen..."
+    "Found %s.": "%s gefunden."
+    "Skipping a conversation without an id.": "Unterhaltung ohne ID wird übersprungen."
+    "Fetching conversation %d/%d...": "Unterhaltung %d/%d wird abgerufen..."
+    "Could not fetch conversation %s: %s": "Unterhaltung %s konnte nicht abgerufen werden: %s"
+    "DONE: synced %s (%s unread, %s failed)": "FERTIG: %s synchronisiert (%s ungelesen, %s fehlgeschlagen)"
+
+#################################################
+kleinanzeigen_bot/messagebox_probe.py:
+#################################################
+  _open_conversations:
+    "No conversation links found on the message overview.": "Keine Links zu Unterhaltungen in der Nachrichtenübersicht gefunden."
+    "Timed out while opening a conversation.": "Zeitüberschreitung beim Öffnen einer Unterhaltung."
+  probe_messagebox:
+    "############################################": "############################################"
+    "# Recording for %s seconds. Send a message in the browser now.": "# Aufzeichnung für %s Sekunden. Bitte jetzt im Browser eine Nachricht senden."
+    "Still recording, %s seconds left...": "Aufzeichnung läuft, noch %s Sekunden..."
+    "Opening the message overview...": "Nachrichtenübersicht wird geöffnet..."
+    "Opened %s conversation(s).": "%s Unterhaltung(en) geöffnet."
+    "Recorded %s message box call(s).": "%s Postfach-Aufruf(e) aufgezeichnet."
+    "Report written to %s": "Bericht geschrieben nach %s"
+    "Report contains unredacted message content - do not share it.": "Der Bericht enthält ungeschwärzte Nachrichteninhalte - bitte nicht weitergeben."
 
 #################################################
 kleinanzeigen_bot/runtime_config.py:
@@ -71,6 +137,16 @@ kleinanzeigen_bot/__init__.py:
 #################################################
 kleinanzeigen_bot/app.py:
 #################################################
+  _require_conversation_id:
+    "--conversation=<id> is required. Run 'messages' first and take the id from the synced YAML file.": "--conversation=<id> ist erforderlich. Bitte zuerst 'messages' ausführen und die ID aus der synchronisierten YAML-Datei übernehmen."
+  _handle_reply:
+    "--text=<message> is required and must not be empty.": "--text=<Nachricht> ist erforderlich und darf nicht leer sein."
+    "%s": "%s"
+  _handle_messages:
+    "Messages directory: %s": "Nachrichtenverzeichnis: %s"
+  _handle_messages_probe:
+    ? "Not logged in (%s) and no password configured, so signing in is not possible. Set login.password (or KLEINANZEIGEN_PASSWORD), or log in once in this browser profile."
+    : "Nicht angemeldet (%s) und kein Passwort konfiguriert, eine Anmeldung ist daher nicht möglich. Bitte login.password (oder KLEINANZEIGEN_PASSWORD) setzen oder einmal in diesem Browser-Profil anmelden."
   _workspace_or_raise:
     "Workspace must be resolved before command execution": "Arbeitsbereich muss vor der Befehlsausführung aufgelöst werden"
 

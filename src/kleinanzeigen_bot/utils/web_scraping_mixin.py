@@ -1750,13 +1750,24 @@ class WebScrapingMixin:  # noqa: PLR0904
 
         return False
 
-    async def web_request(self, url:str, method:str = "GET", valid_response_codes:int | Iterable[int] = 200, headers:dict[str, str] | None = None) -> Any:
+    async def web_request(
+        self,
+        url:str,
+        method:str = "GET",
+        valid_response_codes:int | Iterable[int] = 200,
+        headers:dict[str, str] | None = None,
+        body:str | None = None,
+    ) -> Any:
         method = method.upper()
         LOG.debug(" -> HTTP %s [%s]...", method, url)
+        # json.dumps produces an escaped, ASCII-safe JS string literal, so a body
+        # containing quotes, newlines or umlauts cannot break out of the snippet.
+        body_js = f"body: {json.dumps(body)}," if body is not None else ""
         response = await self.web_execute(f"""
             fetch("{url}", {{
                 method: "{method}",
                 redirect: "follow",
+                {body_js}
                 headers: {headers or {}}
             }})
             .then(response => response.text().then(responseText => {{
