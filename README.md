@@ -218,6 +218,10 @@ Commands:
                         use this after changing config.yaml/ad_defaults to avoid every ad being marked "changed" and republished
   create-config - creates a new default configuration file if one does not exist
   diagnose - diagnoses browser connection issues and shows troubleshooting information
+  messages - downloads the message box conversations as YAML files
+  reply    - sends a reply into a conversation (publicly visible)
+  mark-read - marks a conversation as read
+  messages-probe - records the network calls made by the message box (diagnostic, changes nothing)
   status   - shows ad status and APR preview details
   --
   help     - displays this help (default command)
@@ -252,6 +256,14 @@ Options:
         * all: switch all eligible ads
         * <id(s)>: specify ad IDs, e.g. "--ads=1,2,3"
         * Note: ads already in the target state are skipped.
+  --unread (messages) - only fetch the history of conversations with unread messages
+  --conversation=<ID> (reply, mark-read) - id of the conversation; always required explicitly
+  --text=<TEXT> (reply) - the reply text. Refused if it looks like it contains a phone number
+  --conversations=<N> (messages-probe) - how many conversations to open (DEFAULT: 1)
+  --watch=<SECONDS> (messages-probe) - only record and wait while a human drives the browser;
+        captures actions the bot should not perform itself (e.g. sending a message)
+  --include-raw-bodies (messages-probe) - additionally write the unredacted response bodies;
+        these contain private messages and must not be shared
   --force           - alias for '--ads=all'
   --keep-old        - don't delete old ads on republication
   --preserve-local-settings - force-enable preservation of local-only settings on re-download (overrides config value of false)

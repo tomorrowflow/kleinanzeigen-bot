@@ -22,6 +22,7 @@ _MAX_PERCENTAGE:Final[int] = 100
 _FIELD_NAME_PREFIX:Final[str] = "download."
 _DOWNLOAD_TEMPLATE_ALLOWED_FIELDS:Final[frozenset[str]] = frozenset({"id", "title"})
 DEFAULT_DOWNLOAD_DIR:Final[str] = "downloaded-ads"
+DEFAULT_MESSAGES_DIR:Final[str] = "messages"
 
 
 class AutoPriceReductionConfig(ContextualModel):
@@ -211,6 +212,18 @@ class DownloadConfig(ContextualModel):
             field_name = f"{_FIELD_NAME_PREFIX}ad_file_name_template",
         )
         return self
+
+
+class MessagesConfig(ContextualModel):
+    dir:str = Field(
+        default = DEFAULT_MESSAGES_DIR,
+        description = (
+            "directory where synced conversations are written. "
+            "The default literal 'messages' uses workspace-specific resolution; "
+            "custom relative paths are resolved against the config file location"
+        ),
+        examples = ['"messages"', '"./conversations"'],
+    )
 
 
 class BrowserConfig(ContextualModel):
@@ -593,6 +606,7 @@ class Config(ContextualModel):
     )
 
     download:DownloadConfig = Field(default_factory = DownloadConfig)
+    messages:MessagesConfig = Field(default_factory = MessagesConfig, description = "Message box sync configuration")
     publishing:PublishingConfig = Field(default_factory = PublishingConfig)
     deleting:DeletingConfig = Field(default_factory = DeletingConfig, description = "post-delete YAML cleanup configuration")
     browser:BrowserConfig = Field(default_factory = BrowserConfig, description = "Browser configuration")
