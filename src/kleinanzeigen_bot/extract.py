@@ -534,10 +534,10 @@ class AdExtractor(WebScrapingMixin):
                 # Redesigned layout: images use Tailwind-style classes.
                 # Scope to the main article's image gallery to avoid picking up
                 # thumbnails from "other ads" or recommendation sections.
-                images = await self.web_find_all(
-                    By.CSS_SELECTOR,
-                    "article img[src*='img.kleinanzeigen.de'][class*='object-contain']",
-                )
+                gallery_selector = "article img[src*='img.kleinanzeigen.de'][class*='object-contain']"
+                if await self.web_probe(By.CSS_SELECTOR, gallery_selector) is None:
+                    raise TimeoutError("No image area found.")
+                images = await self.web_find_all(By.CSS_SELECTOR, gallery_selector)
                 if not images:
                     raise TimeoutError("No image area found.")
 
@@ -873,19 +873,11 @@ class AdExtractor(WebScrapingMixin):
         # to a broader query that works on the redesigned (Tailwind) layout,
         # then finally try the Astro island embedded JSON.
         creation_date:str | None = None
-        try:
-            legacy_date = await self.web_text(By.CSS_SELECTOR, DOWNLOAD_CREATION_DATE_SELECTOR)
-            if self._is_valid_creation_date(legacy_date):
-                creation_date = legacy_date
-        except TimeoutError:
-            pass  # Legacy layout may omit the creation-date element.
-        if not creation_date:
-            try:
-                redesigned_date = await self.web_text(By.CSS_SELECTOR, "#viewad-extra-info span")
-                if self._is_valid_creation_date(redesigned_date):
-                    creation_date = redesigned_date
-            except TimeoutError:
-                pass  # Redesigned layout may lack #viewad-extra-info; fall through to island fallback
+        for date_selector in (DOWNLOAD_CREATION_DATE_SELECTOR, "#viewad-extra-info span"):
+            dom_date = await self._optional_text(By.CSS_SELECTOR, date_selector)
+            if self._is_valid_creation_date(dom_date):
+                creation_date = dom_date
+                break
         if not creation_date and island_props:
             island_date = self._unwrap_island_value(island_props.get("formattedCreationDate"))
             if self._is_valid_creation_date(island_date):
@@ -1051,6 +1043,9 @@ class AdExtractor(WebScrapingMixin):
         display labels (e.g. "Zustand") to API keys (e.g. "condition_s").
         """
         attributes:dict[str, str] = {}
+        if await self.web_probe(By.CSS_SELECTOR, "#viewad-details .addetailslist--detail") is None:
+            LOG.debug("No ad details section found on view page for DOM-based attribute extraction.")
+            return attributes
         try:
             detail_items = await self.web_find_all(
                 By.CSS_SELECTOR,
@@ -1111,12 +1106,21 @@ class AdExtractor(WebScrapingMixin):
         except TimeoutError:  # no 'commercial' ad, has no pricing box etc.
             return None, "NOT_APPLICABLE"
 
+    async def _optional_text(self, selector_type:By, selector_value:str) -> str | None:
+        """Return the visible text of an optional ad-page element, or ``None`` if it is absent.
+
+        The ad page has settled by the time fields are extracted, so a single probe
+        suffices. ``web_text`` would wait out the full retry/backoff chain for every
+        element the redesigned layout no longer renders.
+        """
+        element = await self.web_probe(selector_type, selector_value)
+        if element is None:
+            return None
+        return await self.extract_visible_text(element)
+
     async def _extract_shipping_text_from_dom(self) -> str | None:
         """Return the legacy shipping wording element, or ``None`` if it is absent."""
-        try:
-            return await self.web_text(By.CLASS_NAME, "boxedarticle--details--shipping")
-        except TimeoutError:
-            return None
+        return await self._optional_text(By.CLASS_NAME, "boxedarticle--details--shipping")
 
     def _shipping_text_from_island_props(self, island_props:dict[str, Any] | None) -> str | None:
         """Return the shipping wording from the ``shippingHeader`` island prop, if present."""

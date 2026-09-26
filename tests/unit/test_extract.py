@@ -276,7 +276,7 @@ class TestAdExtractorShipping:
         """DOM shipping text takes precedence over potentially conflicting island props."""
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, return_value = shipping_text),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = shipping_text),
             patch.object(test_extractor, "web_request", new_callable = AsyncMock) as mock_web_request,
         ):
             if expected_cost:
@@ -315,10 +315,7 @@ class TestAdExtractorShipping:
         }
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(
-                test_extractor, "web_text", new_callable = AsyncMock,
-                side_effect = TimeoutError if dom_text is None else None, return_value = dom_text,
-            ),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = dom_text),
             patch.object(test_extractor, "web_request", new_callable = AsyncMock, return_value = shipping_response),
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page(island_props = island_props)
@@ -343,7 +340,7 @@ class TestAdExtractorShipping:
         island_props:dict[str, Any] = {"shippingHeader": [0, header_text]}
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, side_effect = TimeoutError),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = None),
             patch.object(test_extractor, "web_request", new_callable = AsyncMock) as mock_web_request,
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page(island_props = island_props)
@@ -361,7 +358,7 @@ class TestAdExtractorShipping:
         """Missing shippingHeader island prop keeps the legacy NOT_APPLICABLE behaviour."""
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, side_effect = TimeoutError),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = None),
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page(
                 island_props = {"formattedCreationDate": [0, "Heute"]}
@@ -391,7 +388,7 @@ class TestAdExtractorShipping:
         }
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, side_effect = TimeoutError),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = None),
             patch.object(test_extractor, "web_request", new_callable = AsyncMock, return_value = shipping_response),
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page(island_props = island_props)
@@ -409,7 +406,7 @@ class TestAdExtractorShipping:
 
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, side_effect = TimeoutError),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = None),
             patch.object(test_extractor, "web_request", new_callable = AsyncMock) as mock_web_request,
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page(island_props = island_props)
@@ -444,7 +441,7 @@ class TestAdExtractorShipping:
 
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, return_value = "+ Versand ab 4,89 €"),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = "+ Versand ab 4,89 €"),
             patch.object(test_extractor, "web_request", new_callable = AsyncMock, return_value = shipping_response),
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page()
@@ -479,7 +476,7 @@ class TestAdExtractorShipping:
 
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, return_value = "+ Versand ab 4,89 €"),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = "+ Versand ab 4,89 €"),
             patch.object(test_extractor, "web_request", new_callable = AsyncMock, return_value = shipping_response),
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page()
@@ -513,7 +510,7 @@ class TestAdExtractorShipping:
 
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, return_value = "+ Versand ab 4,89 €"),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = "+ Versand ab 4,89 €"),
             patch.object(test_extractor, "web_request", new_callable = AsyncMock, return_value = shipping_response),
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page()
@@ -549,7 +546,7 @@ class TestAdExtractorShipping:
 
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, return_value = "+ Versand ab 4,89 €"),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = "+ Versand ab 4,89 €"),
             patch.object(test_extractor, "web_request", new_callable = AsyncMock, return_value = shipping_response),
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page()
@@ -579,7 +576,7 @@ class TestAdExtractorShipping:
 
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, return_value = "+ Versand ab 7,00 €"),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = "+ Versand ab 7,00 €"),
             patch.object(test_extractor, "web_request", new_callable = AsyncMock, return_value = shipping_response),
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page()
@@ -590,11 +587,35 @@ class TestAdExtractorShipping:
 
     @pytest.mark.asyncio
     # pylint: disable=protected-access
+    async def test_optional_text_returns_none_without_retrying_when_element_is_absent(self, test_extractor:extract_module.AdExtractor) -> None:
+        """A missing optional element resolves after one probe instead of the web_find retry chain."""
+        with (
+            patch.object(test_extractor, "web_probe", new_callable = AsyncMock, return_value = None) as web_probe,
+            patch.object(test_extractor, "web_find", new_callable = AsyncMock) as web_find,
+        ):
+            assert await test_extractor._optional_text(By.CLASS_NAME, "boxedarticle--details--shipping") is None
+
+        web_probe.assert_awaited_once_with(By.CLASS_NAME, "boxedarticle--details--shipping")
+        web_find.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_optional_text_returns_visible_text_when_element_is_present(self, test_extractor:extract_module.AdExtractor) -> None:
+        """A present optional element yields its visible text."""
+        element = MagicMock()
+        with (
+            patch.object(test_extractor, "web_probe", new_callable = AsyncMock, return_value = element),
+            patch.object(test_extractor, "extract_visible_text", new_callable = AsyncMock, return_value = "Nur Abholung") as visible_text,
+        ):
+            assert await test_extractor._optional_text(By.CLASS_NAME, "boxedarticle--details--shipping") == "Nur Abholung"
+
+        visible_text.assert_awaited_once_with(element)
+
+    @pytest.mark.asyncio
     async def test_extract_shipping_info_timeout(self, test_extractor:extract_module.AdExtractor) -> None:
-        """Test shipping info extraction when shipping element is missing (TimeoutError)."""
+        """Test shipping info extraction when the shipping element is missing."""
         with (
             patch.object(test_extractor, "page", MagicMock()),
-            patch.object(test_extractor, "web_text", new_callable = AsyncMock, side_effect = TimeoutError),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = None),
         ):
             shipping_type, costs, options = await test_extractor._extract_shipping_info_from_ad_page()
 
@@ -1066,10 +1087,10 @@ class TestAdExtractorContent:
                     side_effect = [
                         "Test Title",  # Title extraction
                         web_description_with_affixes,  # Description with affixes (as it appears on web)
-                        "03.02.2025",  # Creation date
                     ]
                 ),
                 web_probe = AsyncMock(return_value = None),
+                _optional_text = AsyncMock(return_value = "03.02.2025"),
                 web_execute = AsyncMock(return_value = {"universalAnalyticsOpts": {"dimensions": {"l3_category_id": "", "ad_attributes": ""}}}),
                 _extract_category_from_ad_page = AsyncMock(return_value = "160"),
                 _extract_special_attributes_from_ad_page = AsyncMock(return_value = {}),
@@ -1135,10 +1156,10 @@ class TestAdExtractorContent:
                 side_effect = [
                     "Test Title",  # Title extraction
                     raw_description,  # Description without affixes
-                    "03.02.2025",  # Creation date
                 ]
             ),
             web_probe = AsyncMock(return_value = None),
+            _optional_text = AsyncMock(return_value = "03.02.2025"),
             web_execute = AsyncMock(return_value = {"universalAnalyticsOpts": {"dimensions": {"l3_category_id": "", "ad_attributes": ""}}}),
             _extract_category_from_ad_page = AsyncMock(return_value = "160"),
             _extract_special_attributes_from_ad_page = AsyncMock(return_value = {}),
@@ -1179,11 +1200,12 @@ class TestAdExtractorContent:
                 _extract_contact_from_ad_page = AsyncMock(return_value = ContactPartial()),
             ),
             patch.object(test_extractor, "web_probe", new_callable = AsyncMock, return_value = None),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = "03.02.2025") as mock_optional_text,
         ):
-            mock_web_text.side_effect = ["Test Title", "Description text", "03.02.2025"]
+            mock_web_text.side_effect = ["Test Title", "Description text"]
             ad_cfg, _staging_dir, _final_dir, _ad_file_stem = await test_extractor._extract_ad_page_info_with_directory_handling(base_dir, 12345)
 
-        mock_web_text.assert_any_await(By.CSS_SELECTOR, extract_module.DOWNLOAD_CREATION_DATE_SELECTOR)
+        mock_optional_text.assert_awaited_once_with(By.CSS_SELECTOR, extract_module.DOWNLOAD_CREATION_DATE_SELECTOR)
         assert ad_cfg.created_on is not None
         assert ad_cfg.created_on.isoformat().startswith("2025-02-03")
 
@@ -1201,12 +1223,8 @@ class TestAdExtractorContent:
         with (
             patch.object(test_extractor, "_extract_island_props", new_callable = AsyncMock, return_value = island_props),
             patch.object(test_extractor, "web_execute", new_callable = AsyncMock, return_value = None),
-            patch.object(
-                test_extractor,
-                "web_text",
-                new_callable = AsyncMock,
-                side_effect = ["Description text", TimeoutError(), TimeoutError()],
-            ),
+            patch.object(test_extractor, "web_text", new_callable = AsyncMock, return_value = "Description text"),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, side_effect = [None, None]),
             patch.multiple(
                 test_extractor,
                 _extract_category_from_ad_page = AsyncMock(return_value = "160"),
@@ -1237,12 +1255,8 @@ class TestAdExtractorContent:
         with (
             patch.object(test_extractor, "_extract_island_props", new_callable = AsyncMock, return_value = island_props),
             patch.object(test_extractor, "web_execute", new_callable = AsyncMock, return_value = None),
-            patch.object(
-                test_extractor,
-                "web_text",
-                new_callable = AsyncMock,
-                side_effect = ["Description text", TimeoutError(), "Anzeige online"],
-            ),
+            patch.object(test_extractor, "web_text", new_callable = AsyncMock, return_value = "Description text"),
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, side_effect = [None, "Anzeige online"]),
             patch.multiple(
                 test_extractor,
                 _extract_category_from_ad_page = AsyncMock(return_value = "160"),
@@ -1368,8 +1382,9 @@ class TestAdExtractorContent:
                 _extract_contact_from_ad_page = AsyncMock(return_value = ContactPartial()),
             ),
             patch.object(test_extractor, "_extract_title_from_ad_page", new_callable = AsyncMock) as mock_extract_title,
+            patch.object(test_extractor, "_optional_text", new_callable = AsyncMock, return_value = "03.02.2025"),
         ):
-            mock_web_text.side_effect = ["Description text", "03.02.2025"]
+            mock_web_text.side_effect = ["Description text"]
             ad_cfg, _staging_dir, final_dir, ad_file_stem = await test_extractor._extract_ad_page_info_with_directory_handling(base_dir, 12345)
 
         assert len(encoded_title) > 65
@@ -1666,6 +1681,7 @@ class TestAdExtractorCategory:
 
         with (
             patch.object(extractor, "web_find_all", new_callable = AsyncMock, return_value = [detail_item]),
+            patch.object(extractor, "web_probe", new_callable = AsyncMock, return_value = MagicMock()),
             patch.object(extractor, "web_text", new_callable = AsyncMock, side_effect = text_side_effect),
             patch.object(extractor, "extract_visible_text", new_callable = AsyncMock, side_effect = visible_text_side_effect),
         ):
@@ -1699,6 +1715,7 @@ class TestAdExtractorCategory:
                 new_callable = AsyncMock,
                 return_value = [malformed_item, good_item],
             ),
+            patch.object(extractor, "web_probe", new_callable = AsyncMock, return_value = MagicMock()),
             patch.object(extractor, "web_text", new_callable = AsyncMock, side_effect = text_side_effect),
             patch.object(extractor, "extract_visible_text", new_callable = AsyncMock, side_effect = visible_text_side_effect),
         ):
@@ -1709,16 +1726,15 @@ class TestAdExtractorCategory:
     @pytest.mark.asyncio
     # pylint: disable=protected-access
     async def test_extract_special_attributes_from_dom_returns_empty_when_no_details_section(self, extractor:extract_module.AdExtractor) -> None:
-        """DOM fallback should return empty dict when the details section is not found."""
-        with patch.object(
-            extractor,
-            "web_find_all",
-            new_callable = AsyncMock,
-            side_effect = TimeoutError,
+        """DOM fallback should return empty dict without waiting out retries when the details section is absent."""
+        with (
+            patch.object(extractor, "web_probe", new_callable = AsyncMock, return_value = None),
+            patch.object(extractor, "web_find_all", new_callable = AsyncMock) as web_find_all,
         ):
             result = await extractor._extract_special_attributes_from_dom()
 
         assert result == {}
+        web_find_all.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_extract_special_attributes_falls_back_when_belen_conf_is_missing(self, extractor:extract_module.AdExtractor) -> None:
@@ -1746,6 +1762,7 @@ class TestAdExtractorCategory:
 
         with (
             patch.object(extractor, "web_find_all", new_callable = AsyncMock, return_value = [detail_item]),
+            patch.object(extractor, "web_probe", new_callable = AsyncMock, return_value = MagicMock()),
             patch.object(extractor, "web_text", new_callable = AsyncMock, side_effect = text_side_effect),
             patch.object(extractor, "extract_visible_text", new_callable = AsyncMock, side_effect = visible_text_side_effect),
         ):
@@ -1771,6 +1788,7 @@ class TestAdExtractorCategory:
 
         with (
             patch.object(extractor, "web_find_all", new_callable = AsyncMock, return_value = [detail_item]),
+            patch.object(extractor, "web_probe", new_callable = AsyncMock, return_value = MagicMock()),
             patch.object(extractor, "web_text", new_callable = AsyncMock, side_effect = text_side_effect),
             patch.object(extractor, "extract_visible_text", new_callable = AsyncMock, side_effect = visible_text_side_effect),
         ):
@@ -2064,10 +2082,11 @@ class TestAdExtractorDownload:
         """Test image download when no images are found."""
         with (
             patch.object(extractor, "web_probe", new_callable = AsyncMock, return_value = None),
-            patch.object(extractor, "web_find_all", new_callable = AsyncMock, return_value = []),
+            patch.object(extractor, "web_find_all", new_callable = AsyncMock, return_value = []) as web_find_all,
         ):
             image_paths = await extractor._download_images_from_ad_page("/some/dir", "ad_12345")
             assert len(image_paths) == 0
+            web_find_all.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_download_images_uses_island_urls_after_missing_dom_gallery(self, extractor:extract_module.AdExtractor) -> None:
@@ -2188,10 +2207,10 @@ class TestAdExtractorDownload:
                 side_effect = [
                     "Test Title",  # Title extraction
                     "Description text",  # Description
-                    "03.02.2025",  # Creation date
                 ],
             ),
             patch.object(extractor, "web_probe", new_callable = AsyncMock, return_value = None),
+            patch.object(extractor, "_optional_text", new_callable = AsyncMock, return_value = "03.02.2025"),
             patch.object(
                 extractor,
                 "web_execute",
@@ -2252,10 +2271,10 @@ class TestAdExtractorDownload:
                 side_effect = [
                     "Test Title",  # Title extraction
                     "Description text",  # Description
-                    "03.02.2025",  # Creation date
                 ],
             ),
             patch.object(extractor, "web_probe", new_callable = AsyncMock, return_value = None),
+            patch.object(extractor, "_optional_text", new_callable = AsyncMock, return_value = "03.02.2025"),
             patch.object(
                 extractor,
                 "web_execute",
@@ -2319,10 +2338,10 @@ class TestAdExtractorDownload:
                 side_effect = [
                     "Test Title",  # Title extraction
                     "Description text",  # Description
-                    "03.02.2025",  # Creation date
                 ],
             ),
             patch.object(extractor, "web_probe", new_callable = AsyncMock, return_value = None),
+            patch.object(extractor, "_optional_text", new_callable = AsyncMock, return_value = "03.02.2025"),
             patch.object(
                 extractor,
                 "web_execute",
@@ -2383,10 +2402,10 @@ class TestAdExtractorDownload:
                 side_effect = [
                     title_with_umlauts,  # Title extraction
                     "Description text",  # Description
-                    "03.02.2025",  # Creation date
                 ],
             ),
             patch.object(extractor, "web_probe", new_callable = AsyncMock, return_value = None),
+            patch.object(extractor, "_optional_text", new_callable = AsyncMock, return_value = "03.02.2025"),
             patch.object(
                 extractor,
                 "web_execute",
