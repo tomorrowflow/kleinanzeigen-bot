@@ -279,6 +279,47 @@ def _published_ad_ids(ads:list[PublishedAd]) -> set[int]:
     return result
 
 
+async def _pause_between_ads(web:WebScrapingMixin, config:Config) -> None:
+    """Wait a random interval before the next ad so a batch is not submitted in one burst."""
+    min_s = config.publishing.inter_ad_delay_min_s
+    max_s = config.publishing.inter_ad_delay_max_s
+    if max_s <= 0:
+        return
+    LOG.info("Waiting %s-%s seconds before the next ad...", min_s, max_s)
+    await web.web_sleep(min_s * 1_000, max_s * 1_000)
+
+
+async def _confirm_published_and_cleanup(
+    web:WebScrapingMixin,
+    ad_cfg:Ad,
+    published_ads_for_matching:list[PublishedAd],
+    *,
+    root_url:str,
+    config:Config,
+    keep_old_ads:bool,
+) -> None:
+    """Wait for the publish confirmation, then delete the old ad version if configured."""
+    try:
+        publish_timeout = web.timeout("publishing_result")
+        await web.web_await(
+            lambda: check_publishing_result(web),
+            timeout = publish_timeout,
+        )
+    except TimeoutError:
+        LOG.warning(
+            " -> Could not confirm publishing for '%s', but ad may be online",
+            ad_cfg.title,
+        )
+
+    await delete_old_ad_if_needed(
+        web, ad_cfg, published_ads_for_matching,
+        timing = "AFTER_PUBLISH",
+        keep_old_ads = keep_old_ads,
+        config = config,
+        root_url = root_url,
+    )
+
+
 async def publish_ads(
     web:WebScrapingMixin,
     ad_cfgs:list[tuple[str, Ad, dict[str, Any]]],
@@ -306,6 +347,7 @@ async def publish_ads(
     count = 0
     failed_count = 0
     max_retries = SUBMISSION_MAX_RETRIES
+    attempted_any = False
     published_ads_list, strict_published_ads_list, require_strict_fetch = await _fetch_published_ads_for_publish(
         web,
         root_url,
@@ -342,6 +384,9 @@ async def publish_ads(
             LOG.info("Skipping because ad is reserved")
             continue
 
+        if attempted_any:
+            await _pause_between_ads(web, config)
+        attempted_any = True
         count += 1
         success = False
         baseline_price = ad_cfg.price
@@ -431,24 +476,9 @@ async def publish_ads(
 
         # Check publishing result separately (no retry - ad is already submitted)
         if success:
-            try:
-                publish_timeout = web.timeout("publishing_result")
-                await web.web_await(
-                    lambda: check_publishing_result(web),
-                    timeout = publish_timeout,
-                )
-            except TimeoutError:
-                LOG.warning(
-                    " -> Could not confirm publishing for '%s', but ad may be online",
-                    ad_cfg.title,
-                )
-
-            await delete_old_ad_if_needed(
+            await _confirm_published_and_cleanup(
                 web, ad_cfg, published_ads_for_matching,
-                timing = "AFTER_PUBLISH",
-                keep_old_ads = keep_old_ads,
-                config = config,
-                root_url = root_url,
+                root_url = root_url, config = config, keep_old_ads = keep_old_ads,
             )
 
     LOG.info("############################################")
@@ -492,6 +522,7 @@ async def update_ads(
     count = 0
     failed_count = 0
     max_retries = SUBMISSION_MAX_RETRIES
+    attempted_any = False
 
     published_ads_list = await published_ads.fetch_published_ads(web, root_url)
 
@@ -511,6 +542,9 @@ async def update_ads(
             LOG.info("Skipping because ad is reserved")
             continue
 
+        if attempted_any:
+            await _pause_between_ads(web, config)
+        attempted_any = True
         count += 1
         success = False
         baseline_price = ad_cfg.price

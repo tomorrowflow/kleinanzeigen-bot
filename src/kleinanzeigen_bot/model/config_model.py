@@ -296,6 +296,16 @@ class PublishingConfig(ContextualModel):
         default = True,
         description = "match ads by title when deleting old ads before publish or deleting ID-less ads; ambiguous title matches are skipped",
     )
+    inter_ad_delay_min_s:int = Field(
+        default = 30,
+        ge = 0,
+        description = "minimum random pause between consecutive ads during publish and update (seconds); set both bounds to 0 to disable",
+    )
+    inter_ad_delay_max_s:int = Field(
+        default = 120,
+        ge = 0,
+        description = "maximum random pause between consecutive ads during publish and update (seconds)",
+    )
     local_path_renaming:LocalPathRenamingConfig = Field(
         default_factory = LocalPathRenamingConfig,
         description = (
@@ -305,6 +315,17 @@ class PublishingConfig(ContextualModel):
             "only paths whose names match the template structure are updated."
         ),
     )
+
+    @model_validator(mode = "after")
+    def _validate_inter_ad_delay(self) -> PublishingConfig:
+        if self.inter_ad_delay_max_s < self.inter_ad_delay_min_s:
+            raise ValueError(
+                _("%(hi_name)s (%(hi_value)d) must be >= %(lo_name)s (%(lo_value)d).") % {
+                    "hi_name": "inter_ad_delay_max_s", "hi_value": self.inter_ad_delay_max_s,
+                    "lo_name": "inter_ad_delay_min_s", "lo_value": self.inter_ad_delay_min_s,
+                }
+            )
+        return self
 
 
 class DeletingConfig(ContextualModel):
