@@ -4,7 +4,7 @@
 import pytest
 
 from kleinanzeigen_bot.model import config_model
-from kleinanzeigen_bot.model.config_model import DEFAULT_DOWNLOAD_DIR, AdDefaults, Config, TimeoutConfig
+from kleinanzeigen_bot.model.config_model import DEFAULT_DOWNLOAD_DIR, AdDefaults, Config, PublishingConfig, TimeoutConfig
 
 
 @pytest.mark.parametrize("field", ["prefix", "suffix"])
@@ -470,3 +470,11 @@ def test_login_entry_mode_accepts_supported_values(mode:str) -> None:
 def test_login_entry_mode_rejects_unknown_value() -> None:
     with pytest.raises(ValueError, match = "entry_mode"):
         Config.model_validate({"login": {"username": "dummy", "password": "dummy", "entry_mode": "UNKNOWN"}})  # noqa: S106
+
+
+def test_publishing_inter_ad_delay_defaults_and_bounds() -> None:
+    cfg = PublishingConfig.model_validate({})
+    assert (cfg.inter_ad_delay_min_s, cfg.inter_ad_delay_max_s) == (30, 120)
+
+    with pytest.raises(ValueError, match = "inter_ad_delay_max_s"):
+        PublishingConfig.model_validate({"inter_ad_delay_min_s": 60, "inter_ad_delay_max_s": 10})

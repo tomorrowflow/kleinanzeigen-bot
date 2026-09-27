@@ -269,6 +269,12 @@ kleinanzeigen_bot/publishing_workflow.py:
     " -> effective ad meta:": " -> effektive Anzeigen-Metadaten:"
     "Post-publish persistence failed for '%s' (ad ID %s - ad is live on Kleinanzeigen but local YAML may be out of sync)": "Persistenz nach Veröffentlichung fehlgeschlagen für '%s' (Anzeigen-ID %s - Anzeige ist auf Kleinanzeigen live, aber die lokale YAML ist möglicherweise nicht synchron)"
 
+  _confirm_published_and_cleanup:
+    " -> Could not confirm publishing for '%s', but ad may be online": " -> Veröffentlichung für '%s' konnte nicht bestätigt werden, aber Anzeige ist möglicherweise online"
+
+  _pause_between_ads:
+    "Waiting %s-%s seconds before the next ad...": "Warte %s-%s Sekunden vor der nächsten Anzeige..."
+
   _fetch_published_ads_for_publish:
     "Skipping title-based publishes because full published-ad list could not be fetched before publish: %s": "Titelbasierte Veröffentlichungen werden übersprungen, weil die vollständige Liste veröffentlichter Anzeigen vor der Veröffentlichung nicht abgerufen werden konnte: %s"
     "Complete published-ad snapshot unavailable; no-ID publish recovery is disabled: %s": "Vollständiger Stand der veröffentlichten Anzeigen nicht verfügbar; die Wiederherstellung nach Veröffentlichung ohne Anzeigen-ID ist deaktiviert: %s"
@@ -278,7 +284,6 @@ kleinanzeigen_bot/publishing_workflow.py:
     "Skipping because ad is reserved": "Überspringen, da Anzeige reserviert ist"
     ? "Skipping '%s' because strict published-ad fetch failed before publish. Retry by re-running the publish after transient API issues have resolved."
     : "'%s' wird übersprungen, weil der strikte Abruf veröffentlichter Anzeigen vor der Veröffentlichung fehlgeschlagen ist. Wiederholen Sie die Veröffentlichung, nachdem vorübergehende API-Probleme behoben sind."
-    " -> Could not confirm publishing for '%s', but ad may be online": " -> Veröffentlichung für '%s' konnte nicht bestätigt werden, aber Anzeige ist möglicherweise online"
     "Attempt %s/%s failed for '%s': %s. Retrying...": "Versuch %s/%s fehlgeschlagen für '%s': %s. Erneuter Versuch..."
     "Attempt %s/%s for '%s' reached submit boundary but failed: %s. Not retrying to prevent duplicate listings.": "Versuch %s/%s für '%s' hat die Submit-Grenze erreicht, ist aber fehlgeschlagen: %s. Kein erneuter Versuch, um doppelte Anzeigen zu vermeiden."
     "Manual recovery required for '%s'. Check 'Meine Anzeigen' to confirm whether the ad was posted.": "Manuelle Wiederherstellung für '%s' erforderlich. Prüfen Sie in 'Meine Anzeigen', ob die Anzeige veröffentlicht wurde."
@@ -1198,6 +1203,8 @@ kleinanzeigen_bot/model/config_model.py:
   _validate_viewport_sizes:
     "Invalid viewport size '%(size)s'. Width and height must be positive integers, e.g. '1920x1080'.": "Ungültige Viewport-Größe '%(size)s'. Breite und Höhe müssen positive Ganzzahlen sein, z.B. '1920x1080'."
   _validate_ranges:
+    "%(hi_name)s (%(hi_value)d) must be >= %(lo_name)s (%(lo_value)d).": "%(hi_name)s (%(hi_value)d) muss >= %(lo_name)s (%(lo_value)d) sein."
+  _validate_inter_ad_delay:
     "%(hi_name)s (%(hi_value)d) must be >= %(lo_name)s (%(lo_value)d).": "%(hi_name)s (%(hi_value)d) muss >= %(lo_name)s (%(lo_value)d) sein."
 
 #################################################

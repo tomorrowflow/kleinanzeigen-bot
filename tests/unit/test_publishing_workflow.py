@@ -618,6 +618,54 @@ class TestKleinanzeigenBotPublishAdsBasics:
             web_open_mock.assert_awaited_once_with(expected_url, reload_if_already_open = True)
 
 
+class TestInterAdDelay:
+    """A random pause separates consecutive ads so a batch is not submitted in one burst."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("flow", ["publish_ads", "update_ads"])
+    async def test_pauses_only_between_attempted_ads(
+        self, test_bot:KleinanzeigenBot, base_ad_config:dict[str, Any], flow:str
+    ) -> None:
+        test_bot.config.publishing.inter_ad_delay_min_s = 30
+        test_bot.config.publishing.inter_ad_delay_max_s = 120
+        test_bot.keep_old_ads = True
+        ad_cfgs = [
+            build_update_ad(base_ad_config, 301, "Active Ad 1"),
+            build_update_ad(base_ad_config, 302, "Paused Ad 302"),
+            build_update_ad(base_ad_config, 303, "Active Ad 2"),
+            build_update_ad(base_ad_config, 304, "Active Ad 3"),
+        ]
+        published_ads = build_published_ads((301, "active"), (302, "paused"), (303, "active"), (304, "active"))
+
+        with (
+            patch("kleinanzeigen_bot.published_ads.fetch_published_ads", new_callable = AsyncMock, return_value = published_ads),
+            patch("kleinanzeigen_bot.publishing_workflow.publish_ad", new_callable = AsyncMock) as publish_mock,
+            patch.object(test_bot, "web_sleep", new_callable = AsyncMock) as sleep_mock,
+            patch.object(test_bot, "web_await", new_callable = AsyncMock, return_value = True),
+        ):
+            await getattr(test_bot, flow)(ad_cfgs)
+
+        assert publish_mock.await_count == 3
+        assert sleep_mock.await_args_list == [call(30_000, 120_000), call(30_000, 120_000)]
+
+    @pytest.mark.asyncio
+    async def test_disabled_delay_does_not_pause(self, test_bot:KleinanzeigenBot, base_ad_config:dict[str, Any]) -> None:
+        test_bot.keep_old_ads = True
+        ad_cfgs = [build_update_ad(base_ad_config, 401, "Active Ad 401"), build_update_ad(base_ad_config, 402, "Active Ad 402")]
+        published_ads = build_published_ads((401, "active"), (402, "active"))
+
+        with (
+            patch("kleinanzeigen_bot.published_ads.fetch_published_ads", new_callable = AsyncMock, return_value = published_ads),
+            patch("kleinanzeigen_bot.publishing_workflow.publish_ad", new_callable = AsyncMock) as publish_mock,
+            patch.object(test_bot, "web_sleep", new_callable = AsyncMock) as sleep_mock,
+            patch.object(test_bot, "web_await", new_callable = AsyncMock, return_value = True),
+        ):
+            await test_bot.publish_ads(ad_cfgs)
+
+        assert publish_mock.await_count == 2
+        sleep_mock.assert_not_awaited()
+
+
 class TestDisplayCounterProgression:
     """Regression tests for issue #977: progress counter must increment for every ad, including skipped ones."""
 

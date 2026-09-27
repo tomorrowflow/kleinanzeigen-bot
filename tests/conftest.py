@@ -70,7 +70,9 @@ def test_bot_config() -> Config:
         },
         "publishing": {
             "delete_old_ads": "BEFORE_PUBLISH",
-            "delete_old_ads_by_title": False
+            "delete_old_ads_by_title": False,
+            "inter_ad_delay_min_s": 0,
+            "inter_ad_delay_max_s": 0,
         }
     })
 
