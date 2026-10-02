@@ -23,6 +23,19 @@ class PublishSubmissionUncertainError(KleinanzeigenBotError):
         super().__init__(reason)
 
 
+class FormValidationError(KleinanzeigenBotError):
+    """Raised when the ad form rejected the submit and stayed open with field errors.
+
+    The site validated the form client-side and never sent it, so nothing was
+    published or modified. Retrying with the same ad config fails the same way:
+    the user must fix the reported fields in the ad YAML.
+    """
+
+    def __init__(self, fields:list[str]) -> None:
+        super().__init__("; ".join(fields))
+        self.fields = fields
+
+
 class CategoryResolutionError(KleinanzeigenBotError):
     """Raised when the ad's configured category cannot be resolved by publish/update flows.
 

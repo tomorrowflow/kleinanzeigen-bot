@@ -26,7 +26,7 @@ from kleinanzeigen_bot.model.config_model import (
 )
 from kleinanzeigen_bot.published_ads import PublishedAdsFetchIncompleteError
 from kleinanzeigen_bot.publishing_workflow import SUBMISSION_MAX_RETRIES, PostPublishPersistenceError, open_ad_for_edit
-from kleinanzeigen_bot.utils.exceptions import CategoryResolutionError, PublishSubmissionUncertainError
+from kleinanzeigen_bot.utils.exceptions import CategoryResolutionError, FormValidationError, PublishSubmissionUncertainError
 from kleinanzeigen_bot.utils.web_scraping_mixin import By
 from tests.conftest import build_published_ads, build_update_ad
 
@@ -126,6 +126,45 @@ class TestKleinanzeigenBotUpdateAdsResilience:
 
         assert publish_mock.await_count == 2
         sleep_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_ads_form_validation_error_is_not_retried(
+        self,
+        test_bot:KleinanzeigenBot,
+        base_ad_config:dict[str, Any],
+        caplog:pytest.LogCaptureFixture,
+    ) -> None:
+        """Form field errors during ad updates are reported and not retried; later ads still run."""
+        ad_one = build_update_ad(base_ad_config, 305, "Form Error Update")
+        ad_two = build_update_ad(base_ad_config, 306, "Second Update")
+
+        async def publish_side_effect(
+            _web:Any,
+            _ad_file:str,
+            ad_cfg:Ad,
+            _ad_cfg_orig:dict[str, Any],
+            _published_ads:list[dict[str, Any]],
+            _mode:AdUpdateStrategy,
+            **kwargs:Any,
+        ) -> None:
+            if ad_cfg.id == 305:
+                raise FormValidationError(["'Art': Bitte gib einen Wert ein. [special_attributes key: art_s]"])
+
+        with (
+            patch(
+                "kleinanzeigen_bot.published_ads.fetch_published_ads",
+                new_callable = AsyncMock,
+                return_value = build_published_ads((305, "active"), (306, "active")),
+            ),
+            patch("kleinanzeigen_bot.publishing_workflow.publish_ad", new_callable = AsyncMock, side_effect = publish_side_effect) as publish_mock,
+            patch.object(test_bot, "web_sleep", new_callable = AsyncMock),
+            patch.object(test_bot, "web_await", new_callable = AsyncMock, return_value = True),
+            caplog.at_level(logging.ERROR),
+        ):
+            await test_bot.update_ads([ad_one, ad_two])
+
+        assert [call.args[2].id for call in publish_mock.await_args_list] == [305, 306]
+        assert "[special_attributes key: art_s]" in caplog.text
 
     @pytest.mark.asyncio
     async def test_update_ads_category_resolution_error_is_not_retried(self, test_bot:KleinanzeigenBot, base_ad_config:dict[str, Any]) -> None:
@@ -353,6 +392,45 @@ class TestKleinanzeigenBotPublishAdsBasics:
 
             assert publish_mock.await_count == 1
             sleep_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_publish_ads_reports_form_validation_error_without_retry(
+        self,
+        test_bot:KleinanzeigenBot,
+        base_ad_config:dict[str, Any],
+        mock_page:MagicMock,
+        caplog:pytest.LogCaptureFixture,
+    ) -> None:
+        """Form field errors mean nothing was submitted: fail fast and name every field."""
+        test_bot.page = mock_page
+        test_bot.keep_old_ads = True
+
+        ad_cfg = Ad.model_validate(base_ad_config)
+        ad_cfg_orig = copy.deepcopy(base_ad_config)
+        field = "'Gerät & Zubehör': Bitte gib einen Wert ein. [special_attributes key: device_equipment_s]"
+
+        with (
+            patch.object(
+                test_bot,
+                "web_request",
+                new_callable = AsyncMock,
+                return_value = {"content": json.dumps({"ads": [], "paging": {"pageNum": 1, "last": 1}})},
+            ),
+            patch(
+                "kleinanzeigen_bot.publishing_workflow.publish_ad",
+                new_callable = AsyncMock,
+                side_effect = FormValidationError([field]),
+            ) as publish_mock,
+            patch.object(test_bot, "web_sleep", new_callable = AsyncMock) as sleep_mock,
+            caplog.at_level(logging.ERROR),
+        ):
+            await test_bot.publish_ads([("ad.yaml", ad_cfg, ad_cfg_orig)])
+
+        assert publish_mock.await_count == 1
+        sleep_mock.assert_not_awaited()
+        assert "nothing was submitted" in caplog.text
+        assert field in caplog.text
+        assert "submit boundary" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_publish_ads_treats_post_publish_persistence_error_as_fail_closed(

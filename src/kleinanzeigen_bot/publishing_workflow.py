@@ -32,7 +32,7 @@ from .model.ad_model import Ad, AdUpdateStrategy
 from .model.config_model import Config
 from .published_ads import PublishedAd, PublishedAdsFetchIncompleteError, ad_matches_id
 from .utils import loggers as _loggers
-from .utils.exceptions import CategoryResolutionError, PublishSubmissionUncertainError
+from .utils.exceptions import CategoryResolutionError, FormValidationError, PublishSubmissionUncertainError
 from .utils.i18n import pluralize
 from .utils.web_scraping_mixin import By, Is, WebScrapingMixin
 
@@ -265,6 +265,23 @@ async def _fetch_published_ads_for_publish(
     return published_ads_list, strict_published_ads_list, require_strict_fetch
 
 
+def _log_configuration_error(title:str, ex:CategoryResolutionError | FormValidationError) -> None:
+    """Report an ad config problem the site rejected as a definite, non-retryable failure."""
+    if isinstance(ex, CategoryResolutionError):
+        LOG.error(
+            "Category resolution failed for '%s': %s. Skipping ad (configuration error, no retry).",
+            title, ex,
+        )
+        return
+    LOG.error(
+        "Form rejected '%s' with %s field error(s); nothing was submitted. "
+        "Fix the ad file and run again. Skipping ad (configuration error, no retry).",
+        title, len(ex.fields),
+    )
+    for field in ex.fields:
+        LOG.error(" -> form field error %s", field)
+
+
 def _published_ad_ids(ads:list[PublishedAd]) -> set[int]:
     """Return parseable IDs from a complete published-ad snapshot."""
     result:set[int] = set()
@@ -371,13 +388,10 @@ async def publish_ads(
                 break  # Publish succeeded, exit retry loop
             except asyncio.CancelledError:
                 raise  # Respect task cancellation
-            except CategoryResolutionError as ex:
+            except (CategoryResolutionError, FormValidationError) as ex:
                 if capture_diagnostics:
                     await capture_diagnostics(ad_cfg, ad_cfg_orig, ad_file, attempt, ex)
-                LOG.error(
-                    "Category resolution failed for '%s': %s. Skipping ad (configuration error, no retry).",
-                    ad_cfg.title, ex,
-                )
+                _log_configuration_error(ad_cfg.title, ex)
                 failed_count += 1
                 break
             except PublishSubmissionUncertainError as ex:
@@ -557,13 +571,10 @@ async def update_ads(
                 )
                 failed_count += 1
                 break
-            except CategoryResolutionError as ex:
+            except (CategoryResolutionError, FormValidationError) as ex:
                 if capture_diagnostics:
                     await capture_diagnostics(ad_cfg, ad_cfg_orig, ad_file, attempt, ex)
-                LOG.error(
-                    "Category resolution failed for '%s': %s. Skipping ad (configuration error, no retry).",
-                    ad_cfg.title, ex,
-                )
+                _log_configuration_error(ad_cfg.title, ex)
                 failed_count += 1
                 break
             except (TimeoutError, ProtocolException) as ex:

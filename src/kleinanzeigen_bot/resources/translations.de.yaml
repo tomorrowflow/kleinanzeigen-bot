@@ -273,6 +273,12 @@ kleinanzeigen_bot/publishing_workflow.py:
     "Skipping title-based publishes because full published-ad list could not be fetched before publish: %s": "Titelbasierte Veröffentlichungen werden übersprungen, weil die vollständige Liste veröffentlichter Anzeigen vor der Veröffentlichung nicht abgerufen werden konnte: %s"
     "Complete published-ad snapshot unavailable; no-ID publish recovery is disabled: %s": "Vollständiger Stand der veröffentlichten Anzeigen nicht verfügbar; die Wiederherstellung nach Veröffentlichung ohne Anzeigen-ID ist deaktiviert: %s"
 
+  _log_configuration_error:
+    "Category resolution failed for '%s': %s. Skipping ad (configuration error, no retry).": "Kategorieauflösung fehlgeschlagen für '%s': %s. Anzeige wird übersprungen (Konfigurationsfehler, kein erneuter Versuch)."
+    ? "Form rejected '%s' with %s field error(s); nothing was submitted. Fix the ad file and run again. Skipping ad (configuration error, no retry)."
+    : "Formular hat '%s' mit %s Feldfehler(n) abgelehnt; es wurde nichts abgesendet. Anzeigendatei korrigieren und erneut ausführen. Anzeige wird übersprungen (Konfigurationsfehler, kein erneuter Versuch)."
+    " -> form field error %s": " -> Formularfeldfehler %s"
+
   publish_ads:
     "Processing %s/%s: '%s' from [%s]...": "Verarbeite %s/%s: '%s' von [%s]..."
     "Skipping because ad is reserved": "Überspringen, da Anzeige reserviert ist"
@@ -287,7 +293,6 @@ kleinanzeigen_bot/publishing_workflow.py:
     ? "Persistence failed for '%s' after ad submission. Ad ID: %s. No retry performed. If the ad is online, sync local state manually."
     : "Persistenz für '%s' nach dem Absenden der Anzeige fehlgeschlagen. Anzeigen-ID: %s. Kein erneuter Versuch ausgeführt. Falls die Anzeige online ist, lokalen Stand manuell synchronisieren."
     "All %s attempts failed for '%s': %s. Skipping ad.": "Alle %s Versuche fehlgeschlagen für '%s': %s. Überspringe Anzeige."
-    "Category resolution failed for '%s': %s. Skipping ad (configuration error, no retry).": "Kategorieauflösung fehlgeschlagen für '%s': %s. Anzeige wird übersprungen (Konfigurationsfehler, kein erneuter Versuch)."
     "DONE: (Re-)published %s (%s failed after retries)": "FERTIG: %s (erneut) veröffentlicht (%s fehlgeschlagen nach Wiederholungen)"
     "DONE: (Re-)published %s": "FERTIG: %s (erneut) veröffentlicht"
     "ad": "Anzeige"
@@ -297,7 +302,6 @@ kleinanzeigen_bot/publishing_workflow.py:
     "Skipping because ad is reserved": "Überspringen, da Anzeige reserviert ist"
     " -> SKIPPED: ad '%s' (ID: %s) not found in published ads": " -> ÜBERSPRUNGEN: Anzeige '%s' (ID: %s) nicht in veröffentlichten Anzeigen gefunden"
     "Attempt %s/%s for '%s' reached submit boundary but failed: %s. Not retrying to prevent duplicate modifications.": "Versuch %s/%s für '%s' hat die Sendegrenze erreicht, ist aber fehlgeschlagen: %s. Kein weiterer Versuch, um doppelte Änderungen zu vermeiden."
-    "Category resolution failed for '%s': %s. Skipping ad (configuration error, no retry).": "Kategorieauflösung fehlgeschlagen für '%s': %s. Anzeige wird übersprungen (Konfigurationsfehler, kein erneuter Versuch)."
     "Manual recovery required for '%s'. Check 'Meine Anzeigen' to confirm whether the update was applied.": "Manuelle Nachbearbeitung für '%s' erforderlich. Bitte unter 'Meine Anzeigen' prüfen, ob die Aktualisierung übernommen wurde."
     ? "Persistence failed for '%s' after ad update submission. Ad ID: %s. No retry performed. If the ad is online, sync local state manually."
     : "Persistenz für '%s' nach dem Absenden der Anzeigenaktualisierung fehlgeschlagen. Anzeigen-ID: %s. Kein erneuter Versuch ausgeführt. Falls die Anzeige online ist, lokalen Stand manuell synchronisieren."
