@@ -8,10 +8,11 @@ submit click, confirmation polling, and fallback recovery when the
 confirmation page redirects too fast to inspect the URL directly.
 """
 
+import json
 import re
 import urllib.parse as urllib_parse
 from gettext import gettext as _
-from typing import Final
+from typing import Any, Final
 
 from nodriver.core.connection import ProtocolException
 
@@ -19,7 +20,7 @@ from . import captcha_flow, published_ads
 from .model.ad_model import Ad, AdUpdateStrategy
 from .model.config_model import CaptchaConfig
 from .utils import loggers as _loggers
-from .utils.exceptions import PublishSubmissionUncertainError
+from .utils.exceptions import FormValidationError, PublishSubmissionUncertainError
 from .utils.misc import ainput
 from .utils.web_scraping_mixin import By, WebScrapingMixin
 
@@ -157,6 +158,109 @@ async def _try_recover_ad_id_from_redirect(
     return None
 
 
+_ISLAND_ENVELOPE_LENGTH:Final[int] = 2
+_ISLAND_ARRAY_TYPE:Final[int] = 1
+
+# Visible field errors (e.g. "Bitte gib einen Wert ein.") left on the form after
+# the submit click, each paired with the form field it belongs to, plus the raw
+# props of the form island that describe the category attributes.
+_FORM_FIELD_ERRORS_SCRIPT:Final[str] = r"""
+(() => {
+    const normalize = (text) => (text || '').replace(/\s+/g, ' ').trim();
+    const errors = [];
+    for (const element of document.querySelectorAll('.text-critical')) {
+        const message = normalize(element.innerText);
+        if (!message || !element.getClientRects().length) continue;
+        let node = element.parentElement;
+        let field = null;
+        for (let depth = 0; node && node !== document.body && !field && depth < 5; depth++) {
+            field = node.querySelector('input[name^="attributeMap["], input[id], textarea[id], select[id]');
+            node = node.parentElement;
+        }
+        if (!field) continue;
+        const match = /^attributeMap\[(.+)\]$/.exec(field.name || '');
+        const key = match ? match[1] : null;
+        const fieldId = key || field.id || null;
+        const label = fieldId ? document.querySelector(`label[for="${CSS.escape(fieldId)}"]`) : null;
+        errors.push({key, id: fieldId, label: label ? normalize(label.innerText) : null, message});
+    }
+    const island = [...document.querySelectorAll('astro-island')]
+        .find((candidate) => (candidate.getAttribute('props') || '').includes('attributeId'));
+    return JSON.stringify({errors, props: island ? island.getAttribute('props') : null});
+})()
+"""
+
+
+def _unwrap_island_value(value:Any) -> Any:
+    """Recursively unwrap Astro island props from their ``[type, value]`` envelopes."""
+    if isinstance(value, list) and len(value) == _ISLAND_ENVELOPE_LENGTH and isinstance(value[0], int):
+        inner = value[1]
+        if value[0] == _ISLAND_ARRAY_TYPE and isinstance(inner, list):
+            return [_unwrap_island_value(item) for item in inner]
+        return _unwrap_island_value(inner)
+    if isinstance(value, dict):
+        return {key: _unwrap_island_value(item) for key, item in value.items()}
+    return value
+
+
+def _attribute_options_by_id(raw_props:str | None) -> dict[str, list[tuple[str, str]]]:
+    """Map each category attribute ID in the form island props to its (value, label) options."""
+    if not raw_props:
+        return {}
+    try:
+        props = _unwrap_island_value(json.loads(raw_props))
+    except json.JSONDecodeError:
+        return {}
+
+    options_by_id:dict[str, list[tuple[str, str]]] = {}
+    pending:list[Any] = [props]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, dict):
+            attribute_id = node.get("attributeId")
+            options = node.get("localizedOptions")
+            if isinstance(attribute_id, str) and isinstance(options, list):
+                options_by_id[attribute_id] = [
+                    (str(option["value"]), str(option.get("localizedValue") or option["value"]))
+                    for option in options
+                    if isinstance(option, dict) and option.get("value") is not None
+                ]
+            pending.extend(node.values())
+        elif isinstance(node, list):
+            pending.extend(node)
+    return options_by_id
+
+
+def _describe_form_field_error(error:dict[str, Any], options_by_id:dict[str, list[tuple[str, str]]]) -> str:
+    """Describe one field error, naming the ad YAML key and allowed values for category attributes."""
+    label = error.get("label") or error.get("id") or "?"
+    description = f"'{label}': {error.get('message')}"
+    key = error.get("key")
+    if not isinstance(key, str):
+        return description
+    # special_attributes keys carry a type suffix that publishing strips again (art_s -> art).
+    description += f" [special_attributes key: {key.rsplit('.', maxsplit = 1)[-1]}_s"
+    options = options_by_id.get(key)
+    if options:
+        description += "; allowed values: " + ", ".join(f"{value} ({text})" for value, text in options)
+    return description + "]"
+
+
+async def _collect_form_field_errors(web:WebScrapingMixin) -> list[str]:
+    """Return a description of every field error the ad form is still showing, if any."""
+    try:
+        raw = await web.web_execute(_FORM_FIELD_ERRORS_SCRIPT)
+        result = json.loads(raw) if isinstance(raw, str) else None
+    except Exception as ex:  # noqa: BLE001 - a failed scan must fall through to the uncertain-submission path
+        LOG.debug("Form field error scan failed (%s)", type(ex).__name__)
+        return []
+    if not isinstance(result, dict) or not isinstance(result.get("errors"), list):
+        return []
+
+    options_by_id = _attribute_options_by_id(result.get("props"))
+    return [_describe_form_field_error(error, options_by_id) for error in result["errors"] if isinstance(error, dict)]
+
+
 _SUBMIT_LABELS:Final[tuple[str, ...]] = (
     "Anzeige aufgeben",
     "\u00c4nderungen speichern",
@@ -221,6 +325,8 @@ async def submit_and_confirm_ad(
     Raises:
         PublishSubmissionUncertainError: The submission may have succeeded
             but the ad ID could not be recovered.
+        FormValidationError: The form stayed open with field errors, so
+            nothing was submitted.
         RuntimeError: An internal invariant was violated (ad_id is None
             despite the recovery path).
     """
@@ -346,6 +452,10 @@ async def submit_and_confirm_ad(
         # The confirmation page may have auto-redirected before we could poll it,
         # or the URL was redirected between polling and extraction (race condition).
         # Try to recover the ad ID from tracking data on the current page.
+        # A form still showing field errors was validated client-side and never sent.
+        if field_errors := await _collect_form_field_errors(web):
+            raise FormValidationError(field_errors) from ex
+
         LOG.debug("Confirmation URL polling or extraction failed (%s), attempting tracking data fallback...", type(ex).__name__)
         recovered_from_tracking = False
         try:

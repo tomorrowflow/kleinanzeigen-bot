@@ -3,6 +3,7 @@
 # SPDX-ArtifactOfProjectHomePage: https://github.com/Second-Hand-Friends/kleinanzeigen-bot/
 """Tests for publishing submission functionality."""
 
+import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -13,7 +14,7 @@ from kleinanzeigen_bot import publishing_submission
 from kleinanzeigen_bot.app import KleinanzeigenBot
 from kleinanzeigen_bot.model.ad_model import Ad, AdUpdateStrategy
 from kleinanzeigen_bot.published_ads import PublishedAdsFetchIncompleteError
-from kleinanzeigen_bot.utils.exceptions import PublishSubmissionUncertainError
+from kleinanzeigen_bot.utils.exceptions import FormValidationError, PublishSubmissionUncertainError
 from kleinanzeigen_bot.utils.web_scraping_mixin import By
 
 
@@ -332,6 +333,107 @@ class TestSubmitAndConfirmAd:
             )
 
 
+# Trimmed PostListingForm island props in Astro's [type, value] serialization.
+_FORM_ISLAND_PROPS:str = json.dumps({
+    "data": [0, {
+        "attributes": [0, {
+            "handy_telekom.device_equipment": [0, {
+                "attributeId": [0, "handy_telekom.device_equipment"],
+                "required": [0, True],
+                "localizedName": [0, "Ger\u00e4t & Zubeh\u00f6r"],
+                "localizedOptions": [1, [
+                    [0, {"value": [0, "only_device"], "localizedValue": [0, "Ger\u00e4t"]}],
+                    [0, {"value": [0, "only_equipment"], "localizedValue": [0, "Zubeh\u00f6r"]}],
+                ]],
+            }],
+        }],
+    }],
+})
+
+
+class TestFormValidationErrors:
+    """Tests for reporting field errors left on the ad form after the submit click."""
+
+    @pytest.mark.asyncio
+    async def test_raises_form_validation_error_naming_fields_and_allowed_values(self, test_bot:KleinanzeigenBot) -> None:
+        """A form still showing field errors after submit is a definite failure, not an uncertain one."""
+        ad = _make_min_ad()
+        form_state = json.dumps({
+            "errors": [
+                {
+                    "key": "handy_telekom.device_equipment",
+                    "id": "handy_telekom.device_equipment",
+                    "label": "Ger\u00e4t & Zubeh\u00f6r",
+                    "message": "Bitte gib einen Wert ein.",
+                },
+                {"key": None, "id": "ad-title", "label": "Titel", "message": "Bitte gib einen Titel ein."},
+            ],
+            "props": _FORM_ISLAND_PROPS,
+        })
+
+        async def execute(script:str) -> Any:
+            if "text-critical" in script:
+                return form_state
+            if "querySelectorAll('button')" in script:
+                return True
+            return ""
+
+        with (
+            patch("kleinanzeigen_bot.captcha_flow.check_and_wait_for_captcha", new_callable = AsyncMock),
+            patch.object(test_bot, "web_set_input_value", new_callable = AsyncMock),
+            patch.object(test_bot, "web_probe", new_callable = AsyncMock, return_value = None),
+            patch.object(test_bot, "web_await", new_callable = AsyncMock, side_effect = [True, TimeoutError("timed out")]),
+            patch.object(test_bot, "web_execute", new_callable = AsyncMock, side_effect = execute),
+            patch.object(test_bot, "web_sleep", new_callable = AsyncMock),
+            patch(
+                "kleinanzeigen_bot.publishing_submission._try_recover_ad_id_from_redirect", new_callable = AsyncMock,
+            ) as recover_mock,
+            pytest.raises(FormValidationError) as raised,
+        ):
+            await publishing_submission.submit_and_confirm_ad(
+                test_bot, "test.yaml", ad, AdUpdateStrategy.REPLACE,
+                captcha_config = test_bot.config.captcha,
+                root_url = test_bot.root_url,
+            )
+
+        assert raised.value.fields == [
+            (
+                "'Ger\u00e4t & Zubeh\u00f6r': Bitte gib einen Wert ein. [special_attributes key: device_equipment_s; "
+                "allowed values: only_device (Ger\u00e4t), only_equipment (Zubeh\u00f6r)]"
+            ),
+            "'Titel': Bitte gib einen Titel ein.",
+        ]
+        recover_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_no_field_errors_keeps_submission_uncertain(self, test_bot:KleinanzeigenBot) -> None:
+        """Without field errors on the page the outcome stays uncertain, so duplicates are still prevented."""
+        ad = _make_min_ad()
+
+        async def execute(script:str) -> Any:
+            if "text-critical" in script:
+                return json.dumps({"errors": [], "props": None})
+            if "querySelectorAll('button')" in script:
+                return True
+            return ""
+
+        with (
+            patch("kleinanzeigen_bot.captcha_flow.check_and_wait_for_captcha", new_callable = AsyncMock),
+            patch.object(test_bot, "web_set_input_value", new_callable = AsyncMock),
+            patch.object(test_bot, "web_probe", new_callable = AsyncMock, return_value = None),
+            patch.object(test_bot, "web_await", new_callable = AsyncMock, side_effect = [True, TimeoutError("timed out")]),
+            patch.object(test_bot, "web_execute", new_callable = AsyncMock, side_effect = execute),
+            patch.object(test_bot, "web_sleep", new_callable = AsyncMock),
+            patch("kleinanzeigen_bot.publishing_submission._try_recover_ad_id_from_redirect", new_callable = AsyncMock, return_value = None),
+            pytest.raises(PublishSubmissionUncertainError),
+        ):
+            await publishing_submission.submit_and_confirm_ad(
+                test_bot, "test.yaml", ad, AdUpdateStrategy.REPLACE,
+                captcha_config = test_bot.config.captcha,
+                root_url = test_bot.root_url,
+            )
+
+
 class TestPublishedAdsRecovery:
     """Tests for fail-closed recovery from a complete published-ad snapshot."""
 
@@ -582,7 +684,10 @@ class TestPublishedAdsRecovery:
                 test_bot,
                 "web_execute",
                 new_callable = AsyncMock,
-                side_effect = ["", True, f"{test_bot.root_url}/done", f"{test_bot.root_url}/done"],
+                side_effect = [
+                    "", True, f"{test_bot.root_url}/done", f"{test_bot.root_url}/done",
+                    json.dumps({"errors": [], "props": None}),
+                ],
             ),
             patch(
                 "kleinanzeigen_bot.publishing_submission._is_idless_publish_success_page",
