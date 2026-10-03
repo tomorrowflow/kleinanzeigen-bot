@@ -1022,6 +1022,8 @@ async def _set_condition(web:WebScrapingMixin, condition_value:str) -> bool:
             for (let depth = 0; depth < 5 && ancestor; depth++) {
                 const btn = ancestor.querySelector('button[aria-haspopup="dialog"], button[aria-haspopup="true"]');
                 if (btn) {
+                    // The redesigned trigger has no id; mark it so Python clicks this exact button.
+                    btn.setAttribute('data-kab-condition-trigger', '');
                     return JSON.stringify({found: true, id: btn.id || '', ariaControls: btn.getAttribute('aria-controls') || ''});
                 }
                 ancestor = ancestor.parentElement;
@@ -1065,20 +1067,14 @@ async def _set_condition(web:WebScrapingMixin, condition_value:str) -> bool:
         candidate_values.append(legacy_value)
 
     try:
-        # Click the trigger button via JS (we located it above but need the actual element).
-        # Use CSS to find the dialog-open button by id if available, otherwise by text.
+        # Click the trigger located above: by id if it has one, otherwise by the marker
+        # attribute the JS set. Never fall back to the first aria-haspopup button on the
+        # page - that is "Fototipps", whose photo-tips dialog has no condition radios.
         if trigger_id:
             trigger_btn = await web.web_find(By.ID, trigger_id, timeout = short_timeout)
-            await trigger_btn.click()
         else:
-            hp_btn:Element | None = None
-            for hp_sel in ("button[aria-haspopup='dialog']", "button[aria-haspopup='true']"):
-                hp_btn = await web.web_probe(By.CSS_SELECTOR, hp_sel, timeout = short_timeout)
-                if hp_btn is not None:
-                    break
-            if hp_btn is None:
-                raise TimeoutError(_("Condition dialog trigger button not found"))
-            await hp_btn.click()
+            trigger_btn = await web.web_find(By.CSS_SELECTOR, "button[data-kab-condition-trigger]", timeout = short_timeout)
+        await trigger_btn.click()
 
         # Wait for dialog to open (CSS selector — redesign-safe).
         # Probe both native <dialog open> and ARIA [role="dialog"] variants.

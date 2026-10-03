@@ -3217,14 +3217,15 @@ class TestConditionSelector:
         assert handled is False
 
     @pytest.mark.asyncio
-    async def test_condition_no_trigger_id_uses_aria_haspopup_fallback(self, test_bot:KleinanzeigenBot) -> None:
-        """When trigger_info lacks an id, fall back to button[aria-haspopup] CSS probes."""
-        hp_btn = MagicMock()
-        hp_btn.click = AsyncMock()
+    async def test_condition_no_trigger_id_clicks_marked_trigger(self, test_bot:KleinanzeigenBot) -> None:
+        """Without an id, click the trigger the JS marked, not the first aria-haspopup button (Fototipps)."""
+        marked_btn = MagicMock()
+        marked_btn.click = AsyncMock()
+        fototipps_btn = MagicMock()
+        fototipps_btn.click = AsyncMock()
         dialog = MagicMock()
         radio = MagicMock()
         radio_attrs = MagicMock()
-        radio_attrs.id = "radio-condition-ok"
         radio_attrs.get.side_effect = lambda key, default = None: "radio-condition-ok" if key == "id" else default
         radio.attrs = radio_attrs
         radio.click = AsyncMock()
@@ -3233,19 +3234,21 @@ class TestConditionSelector:
         bestaetigen_btn = MagicMock()
         bestaetigen_btn.click = AsyncMock()
 
-        # trigger_info has found:true but no id — forces aria-haspopup fallback.
-        trigger_info = '{"found": true, "id": "", "ariaControls": "condition-dialog"}'
+        # The redesigned Zustand trigger has no id.
+        trigger_info = '{"found": true, "id": "", "ariaControls": ""}'
 
         async def probe_side_effect(selector_type:By, selector_value:str, **_:Any) -> Element | None:
             """Async side effect for mocking web_probe calls."""
             if selector_type == By.CSS_SELECTOR and 'input[type="radio"]' in selector_value and '"ok"' in selector_value:
                 return radio
             if selector_type == By.CSS_SELECTOR and "aria-haspopup" in selector_value:
-                return hp_btn
+                return fototipps_btn
             return None
 
         async def find_side_effect(selector_type:By, selector_value:str, **_:Any) -> Element:
             """Async side effect for mocking web_find calls."""
+            if selector_type == By.CSS_SELECTOR and selector_value == "button[data-kab-condition-trigger]":
+                return marked_btn
             if selector_type == By.CSS_SELECTOR and selector_value == "dialog[open]":
                 return dialog
             if selector_type == By.CSS_SELECTOR and 'label[for="radio-condition-ok"]' in selector_value:
@@ -3263,22 +3266,18 @@ class TestConditionSelector:
             handled = await _set_condition(test_bot, "ok")
 
         assert handled is True
-        hp_btn.click.assert_awaited_once()
+        marked_btn.click.assert_awaited_once()
+        fototipps_btn.click.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_condition_no_trigger_id_and_no_aria_haspopup_raises(self, test_bot:KleinanzeigenBot) -> None:
-        """When trigger_info has no id and no aria-haspopup button is found, raise TimeoutError."""
-        trigger_info = '{"found": true, "id": "", "ariaControls": "condition-dialog"}'
-
-        async def probe_side_effect(selector_type:By, selector_value:str, **_:Any) -> Element | None:
-            """Async side effect for mocking web_probe calls."""
-            # No aria-haspopup buttons found.
-            return None
+    async def test_condition_no_trigger_id_and_marked_trigger_missing_raises(self, test_bot:KleinanzeigenBot) -> None:
+        """When the marked trigger cannot be found, raise TimeoutError."""
+        trigger_info = '{"found": true, "id": "", "ariaControls": ""}'
 
         with (
             patch.object(test_bot, "web_execute", new_callable = AsyncMock, return_value = trigger_info),
-            patch.object(test_bot, "web_probe", new_callable = AsyncMock, side_effect = probe_side_effect),
-            patch.object(test_bot, "web_find", new_callable = AsyncMock),
+            patch.object(test_bot, "web_probe", new_callable = AsyncMock, return_value = None),
+            patch.object(test_bot, "web_find", new_callable = AsyncMock, side_effect = TimeoutError("not found")),
             patch.object(test_bot, "web_click", new_callable = AsyncMock),
             pytest.raises(TimeoutError, match = "Failed to set attribute"),
         ):
