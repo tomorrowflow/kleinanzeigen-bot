@@ -259,6 +259,10 @@ Options:
   --unread (messages) - only fetch the history of conversations with unread messages
   --conversation=<ID> (reply, mark-read) - id of the conversation; always required explicitly
   --text=<TEXT> (reply) - the reply text. Refused if it looks like it contains a phone number
+  --after=<MESSAGE-ID> (reply) - id of the newest message the reply answers; refused if the
+        conversation has moved on since
+  --settle=<SECONDS> (reply) - wait until the newest inbound message is this old, then check
+        again that nothing new arrived
   --conversations=<N> (messages-probe) - how many conversations to open (DEFAULT: 1)
   --watch=<SECONDS> (messages-probe) - only record and wait while a human drives the browser;
         captures actions the bot should not perform itself (e.g. sending a message)

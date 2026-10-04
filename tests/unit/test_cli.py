@@ -115,6 +115,18 @@ class TestCliParseArgs:
         assert parsed.preserve_local_settings is True
         assert parsed.command == "download"
 
+    def test_parses_reply_guard_options(self) -> None:
+        parsed = cli.parse_args(["script.py", "reply", "--conversation=c1", "--text=hi", "--after= m1 ", "--settle=120"])
+
+        assert parsed.reply_after == "m1"
+        assert parsed.reply_settle_seconds == 120
+
+    def test_a_non_positive_settle_time_exits(self) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            cli.parse_args(["script.py", "reply", "--settle=0"])
+
+        assert exc_info.value.code == 2
+
 
 class TestCliHelpText:
     def test_show_help_uses_german_text(self, capsys:pytest.CaptureFixture[str], monkeypatch:pytest.MonkeyPatch) -> None:

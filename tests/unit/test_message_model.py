@@ -118,6 +118,32 @@ class TestMessageFromApi:
         assert Message.from_api({"messageId": "m1"}).direction is MessageDirection.INBOUND
 
 
+class TestBlankMessages:
+    """The API returns empty INBOUND entries nobody typed, next to real replies."""
+
+    def test_an_empty_entry_without_attachments_is_blank(self) -> None:
+        assert Message.from_api({"messageId": "m1", "boundness": "INBOUND", "textShort": ""}).is_blank
+
+    def test_whitespace_only_text_is_blank(self) -> None:
+        assert Message.from_api({"messageId": "m1", "boundness": "INBOUND", "textShort": "  \n"}).is_blank
+
+    def test_an_image_without_text_is_not_blank(self) -> None:
+        message = Message.from_api({
+            "messageId": "m1", "boundness": "INBOUND", "textShort": "",
+            "attachments": [{"url": "https://example.invalid/a.jpg"}],
+        })
+
+        assert not message.is_blank
+
+    def test_a_payment_event_is_not_blank(self) -> None:
+        message = Message.from_api({"messageId": "m1", "type": "PAYMENT_AND_SHIPPING_MESSAGE"})
+
+        assert not message.is_blank
+
+    def test_ordinary_text_is_not_blank(self) -> None:
+        assert not Message.from_api({"messageId": "m1", "boundness": "INBOUND", "textShort": "Yes"}).is_blank
+
+
 class TestConversationWithDetails:
 
     def _detail(self) -> dict[str, Any]:

@@ -37,6 +37,30 @@ This runs unattended against strangers, so the guard errs towards refusing:
 `+49 151 ...`, `0151 ...`, `030/123456` and any unbroken run of nine or more
 digits all block the send. Send those through the website instead.
 
+### Replying to a conversation that moved on
+
+The message box is asynchronous. Buyers send bursts of short messages, and the
+site delivers some of them late, so an answer to the first one regularly answers
+a question the next one already changed. Two options guard against that:
+
+```bash
+kleinanzeigen-bot reply --conversation='5p123:456dfzm:7ptv8t9bk' \
+  --text='Ja, noch verfuegbar.' --after='0f8c5a7e-1111-4444-8888-abcdefabcdef' --settle=120
+```
+
+- `--after=<message id>` names the newest message the reply answers, taken from
+  the synced YAML. Right before sending, the bot re-reads the conversation and
+  refuses if anything is newer, including a reply sent from the app meanwhile.
+- `--settle=<seconds>` holds the reply until the newest inbound message is that
+  old, then re-reads once more and refuses if something arrived during the wait.
+
+A refused reply exits with code 2 and sends nothing. Sync, read and draft again.
+
+Both options ignore the empty `INBOUND` entries the API returns, usually a
+fraction of a second before one of this account's own messages. They carry no
+text, attachment or offer, and nobody typed them. An entry with an attachment but
+no text is a real message, typically a photo or screenshot.
+
 Marking as read is a separate, explicit call - the site never does it implicitly
 when the bot reads a conversation, only when a human opens one in the browser.
 
