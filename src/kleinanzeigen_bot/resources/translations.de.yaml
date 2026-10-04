@@ -73,6 +73,11 @@ kleinanzeigen_bot/messages_flow.py:
 #################################################
   preserve_existing_history:
     "Could not read existing conversation file %s: %s": "Vorhandene Unterhaltungsdatei %s konnte nicht gelesen werden: %s"
+  ensure_unchanged:
+    ? "The conversation changed after the reply was drafted (newest message is now %s). Nothing was sent - sync, read and draft again."
+    : "Die Unterhaltung hat sich geändert, nachdem die Antwort entworfen wurde (neueste Nachricht ist jetzt %s). Es wurde nichts gesendet - bitte synchronisieren, lesen und neu entwerfen."
+  _wait_until_settled:
+    "Waiting %d seconds for the conversation to settle before sending...": "Warte %d Sekunden, bis die Unterhaltung zur Ruhe kommt, bevor gesendet wird..."
   send_reply:
     "Sending reply to conversation %s...": "Antwort wird an Unterhaltung %s gesendet..."
     "DONE: reply sent.": "FERTIG: Antwort gesendet."

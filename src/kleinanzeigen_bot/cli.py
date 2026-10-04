@@ -66,6 +66,8 @@ class ParsedArgs:
     probe_watch_seconds:int = 0
     conversation_id:str | None = None
     message_text:str | None = None
+    reply_after:str | None = None
+    reply_settle_seconds:int = 0
 
 
 def _warn_unpatched_nodriver() -> None:
@@ -192,6 +194,10 @@ def help_text(*, executable:str | None = None, language:str | None = None) -> st
               --conversation=<ID> (reply, mark-read) - ID der Unterhaltung; immer explizit anzugeben
               --text=<TEXT> (reply) - Text der Antwort. Enthält er etwas, das wie eine Telefonnummer aussieht,
                     wird nicht gesendet
+              --after=<NACHRICHTEN-ID> (reply) - ID der neuesten Nachricht, auf die die Antwort eingeht; ist die
+                    Unterhaltung inzwischen weiter, wird nicht gesendet
+              --settle=<SEKUNDEN> (reply) - Wartet, bis die neueste eingehende Nachricht so alt ist, und prüft dann
+                    erneut, dass nichts Neues kam
               --conversations=<N> (messages-probe) - Anzahl der zu öffnenden Unterhaltungen (STANDARD: 1)
               --watch=<SEKUNDEN> (messages-probe) - Zeichnet nur auf und wartet, während ein Mensch den Browser bedient;
                     damit lassen sich Aktionen erfassen, die der Bot nicht selbst ausführen soll (z. B. Senden)
@@ -267,6 +273,10 @@ def help_text(*, executable:str | None = None, language:str | None = None) -> st
           --unread (messages) - only fetch the history of conversations with unread messages
           --conversation=<ID> (reply, mark-read) - id of the conversation; always required explicitly
           --text=<TEXT> (reply) - the reply text. Refused if it looks like it contains a phone number
+          --after=<MESSAGE-ID> (reply) - id of the newest message the reply answers; refused if the
+                conversation has moved on since
+          --settle=<SECONDS> (reply) - wait until the newest inbound message is this old, then check
+                again that nothing new arrived
           --conversations=<N> (messages-probe) - how many conversations to open (DEFAULT: 1)
           --watch=<SECONDS> (messages-probe) - only record and wait while a human drives the browser;
                 captures actions the bot should not perform itself (e.g. sending a message)
@@ -308,8 +318,8 @@ def parse_args(args:Sequence[str]) -> ParsedArgs:
             list(args)[1:],
             "hv",
             [
-                "ads=", "config=", "force", "help", "include-raw-bodies", "keep-old", "logfile=", "lang=",
-                "conversation=", "conversations=", "preserve-local-settings", "text=", "unread", "verbose", "watch=",
+                "after=", "ads=", "config=", "force", "help", "include-raw-bodies", "keep-old", "logfile=", "lang=",
+                "conversation=", "conversations=", "preserve-local-settings", "settle=", "text=", "unread", "verbose", "watch=",
                 "workspace-mode=",
             ],
         )
@@ -353,6 +363,10 @@ def parse_args(args:Sequence[str]) -> ParsedArgs:
                 parsed.conversation_id = value.strip()
             case "--text":
                 parsed.message_text = value
+            case "--after":
+                parsed.reply_after = value.strip()
+            case "--settle":
+                parsed.reply_settle_seconds = _positive_int(value, "--settle", "a number of seconds")
             case "--watch":
                 parsed.probe_watch_seconds = _positive_int(value, "--watch", "a number of seconds")
             case "--preserve-local-settings":

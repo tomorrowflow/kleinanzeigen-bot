@@ -11,15 +11,19 @@ Primary entry point: :func:`sync_messages`.
 from __future__ import annotations
 
 import asyncio
+import math
+from datetime import UTC, datetime
 from decimal import Decimal
+from gettext import gettext as _
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from . import messagebox
-from .model.message_model import Conversation, MessageKind, Offer, PaymentState
+from .model.message_model import Conversation, Message, MessageDirection, MessageKind, Offer, PaymentState
 from .utils import dicts as _dicts
 from .utils import loggers as _loggers
 from .utils import xdg_paths as _xdg_paths
+from .utils.exceptions import KleinanzeigenBotError
 from .utils.i18n import pluralize
 
 if TYPE_CHECKING:
@@ -136,20 +140,105 @@ def resolve_messages_dir(
     return Path(abspath(trimmed, relative_to = str(Path(config_file_path).parent))).resolve()
 
 
+class ConversationChangedError(KleinanzeigenBotError):
+    """The conversation moved on after the reply was drafted, so it was not sent."""
+
+
+def latest_message(conversation:Conversation) -> Message | None:
+    """The newest message that someone actually wrote or sent, ignoring blank entries."""
+    return next((m for m in reversed(conversation.messages) if not m.is_blank), None)
+
+
+def settle_remaining(conversation:Conversation, settle_seconds:int, now:datetime) -> float:
+    """Seconds left until the newest inbound message is ``settle_seconds`` old.
+
+    Buyers often send a burst of short messages, and the message box delivers
+    them with a lag, so answering the first one right away regularly answers a
+    question that the next one already changed.
+    """
+    newest_inbound = next(
+        (
+            m for m in reversed(conversation.messages)
+            if m.direction is MessageDirection.INBOUND and not m.is_blank and m.received is not None
+        ),
+        None,
+    )
+    if newest_inbound is None or newest_inbound.received is None:
+        return 0.0
+    return max(0.0, settle_seconds - (now - newest_inbound.received).total_seconds())
+
+
+def ensure_unchanged(conversation:Conversation, expected_message_id:str) -> None:
+    """Refuse when the newest message is no longer the one the reply was drafted against."""
+    latest = latest_message(conversation)
+    if latest is None or latest.id != expected_message_id:
+        raise ConversationChangedError(
+            _("The conversation changed after the reply was drafted (newest message is now %s). Nothing was sent - sync, read and draft again.")
+            % (f"{latest.direction.value} {latest.id}" if latest else "none")
+        )
+
+
+async def _fetch_conversation(client:messagebox.MessageBoxClient, conversation_id:str) -> Conversation:
+    detail = await messagebox.fetch_conversation(client, conversation_id)
+    return Conversation(id = conversation_id).with_details(detail)
+
+
+async def _wait_until_settled(
+    client:messagebox.MessageBoxClient,
+    conversation_id:str,
+    *,
+    after:str | None,
+    settle_seconds:int,
+) -> None:
+    """Re-read the conversation right before sending, and hold the reply until it is quiet.
+
+    ``after`` is the newest message the approved draft answers. Anything newer -
+    a late-delivered buyer message, or a reply sent from the app meanwhile -
+    means the approval was for a conversation that no longer exists.
+    """
+    conversation = await _fetch_conversation(client, conversation_id)
+    if after is not None:
+        ensure_unchanged(conversation, after)
+
+    remaining = settle_remaining(conversation, settle_seconds, datetime.now(UTC))
+    if remaining <= 0:
+        return
+    LOG.info("Waiting %d seconds for the conversation to settle before sending...", math.ceil(remaining))
+    await asyncio.sleep(remaining)
+
+    latest = latest_message(conversation)
+    if latest is not None:
+        ensure_unchanged(await _fetch_conversation(client, conversation_id), latest.id)
+
+
 async def send_reply(
     web:WebScrapingMixin,
     *,
     root_url:str,
     conversation_id:str,
     text:str,
+    after:str | None = None,
+    settle_seconds:int = 0,
 ) -> None:
     """Send one reply into one conversation.
 
     Targeting is always explicit: several conversations routinely concern the same
     ad, so "reply to the buyer" is ambiguous in exactly the way that sends the
     wrong person the wrong message.
+
+    Args:
+        after: Id of the newest message the reply answers. The send is refused if
+            the conversation has moved past it.
+        settle_seconds: Hold the reply until the newest inbound message is this old,
+            then check again that nothing new arrived.
+
+    Raises:
+        ConversationChangedError: if the conversation moved on, before or during
+            the wait.
     """
     client = messagebox.MessageBoxClient(web, root_url)
+    if after is not None or settle_seconds > 0:
+        await _wait_until_settled(client, conversation_id, after = after, settle_seconds = settle_seconds)
     LOG.info("Sending reply to conversation %s...", conversation_id)
     await client.send_message(conversation_id, text)
     LOG.info("DONE: reply sent.")

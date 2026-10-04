@@ -184,6 +184,21 @@ class Message(ContextualModel):
             offer = Offer.from_api(payload),
         )
 
+    @property
+    def is_blank(self) -> bool:
+        """Whether this entry carries nothing a person wrote or sent.
+
+        The API returns empty INBOUND entries that nobody typed, mostly a fraction
+        of a second before one of our own replies. Counting them as the newest
+        message makes a thread look unanswered, or changed, when it is neither.
+        """
+        return (
+            not self.text.strip()
+            and not self.attachments
+            and self.kind is MessageKind.MESSAGE
+            and self.offer is None
+        )
+
 
 class Conversation(ContextualModel):
     """A message thread about one ad."""

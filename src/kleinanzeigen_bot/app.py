@@ -111,7 +111,10 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
         self._messages_unread_only = parsed.messages_unread_only
         self._probe_watch_seconds = parsed.probe_watch_seconds
         self._conversation_id = parsed.conversation_id
-        self._message_text = parsed.message_text
+        # reply: what to send, and the guards that decide whether it still may be sent
+        self._message_text, self._reply_after, self._reply_settle_seconds = (
+            parsed.message_text, parsed.reply_after, parsed.reply_settle_seconds,
+        )
         self._config_arg = parsed.config_arg
         self._workspace_mode_arg = cast(_xdg_paths.InstallationMode, parsed.workspace_mode) if parsed.workspace_mode else None
         self._logfile_arg = parsed.logfile_arg
@@ -454,8 +457,10 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
                 root_url = self.root_url,
                 conversation_id = conversation_id,
                 text = self._message_text,
+                after = self._reply_after or None,
+                settle_seconds = self._reply_settle_seconds,
             )
-        except messagebox.PhoneNumberInMessageError as ex:
+        except (messagebox.PhoneNumberInMessageError, messages_flow.ConversationChangedError) as ex:
             LOG.error("%s", ex)
             sys.exit(2)
 
