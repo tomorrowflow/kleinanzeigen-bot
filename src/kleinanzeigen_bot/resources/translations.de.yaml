@@ -95,6 +95,15 @@ kleinanzeigen_bot/messages_flow.py:
     "DONE: synced %s (%s unread, %s failed)": "FERTIG: %s synchronisiert (%s ungelesen, %s fehlgeschlagen)"
 
 #################################################
+kleinanzeigen_bot/ads_probe.py:
+#################################################
+  probe_ads_overview:
+    "Opening the ad overview...": "Anzeigenübersicht wird geöffnet..."
+    "Manage-ads request failed: %s": "Abruf der Anzeigenverwaltung fehlgeschlagen: %s"
+    "Recorded %s ad overview call(s).": "%s Aufruf(e) der Anzeigenübersicht aufgezeichnet."
+    "Report written to %s": "Bericht geschrieben nach %s"
+
+#################################################
 kleinanzeigen_bot/messagebox_probe.py:
 #################################################
   _open_conversations:

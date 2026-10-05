@@ -262,7 +262,7 @@ class NetworkRecorder:
         return [self._by_request_id[request_id] for request_id in self._order]
 
 
-async def _collect_bodies(web:WebScrapingMixin, recorder:NetworkRecorder) -> None:
+async def collect_bodies(web:WebScrapingMixin, recorder:NetworkRecorder) -> None:
     """Fallback sweep for bodies the eager handler did not manage to fetch."""
     for request_id in recorder.request_ids:
         call = recorder.get(request_id)
@@ -276,7 +276,7 @@ async def _collect_bodies(web:WebScrapingMixin, recorder:NetworkRecorder) -> Non
         call.body = body[:_MAX_BODY_CHARS] if isinstance(body, str) else None
 
 
-async def _attach_recorder(web:WebScrapingMixin, recorder:NetworkRecorder) -> None:
+async def attach_recorder(web:WebScrapingMixin, recorder:NetworkRecorder) -> None:
     """Enable network events on the current tab and register the recorder.
 
     ``add_handler`` de-duplicates, so calling this again after a navigation that
@@ -353,10 +353,10 @@ async def probe_messagebox(
     # the single page app makes while loading are actually recorded.
     LOG.info("Opening the message overview...")
     await web.web_open(overview_url)
-    await _attach_recorder(web, recorder)
+    await attach_recorder(web, recorder)
     await web.web_open(overview_url, reload_if_already_open = True)
     await web.web_sleep(3000, 4000)
-    await _attach_recorder(web, recorder)
+    await attach_recorder(web, recorder)
 
     if watch_seconds > 0:
         # The send call can only be captured while a real message is sent, and that
@@ -376,7 +376,7 @@ async def probe_messagebox(
         opened = await _open_conversations(web, overview_url, conversations)
     LOG.info("Opened %s conversation(s).", opened)
 
-    await _collect_bodies(web, recorder)
+    await collect_bodies(web, recorder)
 
     report = build_report(recorder.calls(), include_raw_bodies = include_raw_bodies)
     await asyncio.to_thread(output_dir.mkdir, parents = True, exist_ok = True)

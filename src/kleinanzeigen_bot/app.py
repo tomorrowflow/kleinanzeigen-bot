@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 
 import certifi
 
-from . import ad_loading, ad_status, delete_flow, download_flow, extend_flow, messagebox, messagebox_probe, messages_flow, reserve_flow
+from . import ad_loading, ad_status, ads_probe, delete_flow, download_flow, extend_flow, messagebox, messagebox_probe, messages_flow, reserve_flow
 from . import login_flow as _login_flow
 from . import publishing_workflow as _publishing_workflow
 from . import runtime_config as _runtime_config
@@ -106,10 +106,11 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
         self._ads_selector_explicit = parsed.ads_selector_explicit
         self.keep_old_ads = parsed.keep_old_ads
         self._preserve_local_settings = parsed.preserve_local_settings
-        self._probe_conversations = parsed.probe_conversations
-        self._probe_include_raw_bodies = parsed.probe_include_raw_bodies
         self._messages_unread_only = parsed.messages_unread_only
-        self._probe_watch_seconds = parsed.probe_watch_seconds
+        # messages-probe / ads-probe options
+        self._probe_conversations, self._probe_include_raw_bodies, self._probe_watch_seconds = (
+            parsed.probe_conversations, parsed.probe_include_raw_bodies, parsed.probe_watch_seconds,
+        )
         self._conversation_id = parsed.conversation_id
         # reply: what to send, and the guards that decide whether it still may be sent
         self._message_text, self._reply_after, self._reply_settle_seconds = (
@@ -175,6 +176,8 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
                     await self._handle_messages()
                 case "messages-probe":
                     await self._handle_messages_probe()
+                case "ads-probe":
+                    await self._handle_ads_probe()
                 case "reply":
                     await self._handle_reply()
                 case "mark-read":
@@ -507,6 +510,17 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
             conversations = self._probe_conversations,
             include_raw_bodies = self._probe_include_raw_bodies,
             watch_seconds = self._probe_watch_seconds,
+        )
+
+    async def _handle_ads_probe(self) -> None:
+        """Record the ad overview network traffic to learn where ad statistics live."""
+        self._bootstrap_runtime()
+        await self._open_logged_in_browser()
+        await ads_probe.probe_ads_overview(
+            self,
+            root_url = self.root_url,
+            output_dir = self._diagnostics_output_dir(),
+            include_raw_bodies = self._probe_include_raw_bodies,
         )
 
     def load_ads(self, *, ignore_inactive:bool = True, exclude_ads_with_id:bool = True) -> list[tuple[str, Ad, dict[str, Any]]]:
