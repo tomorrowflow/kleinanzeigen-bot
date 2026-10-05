@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
-from kleinanzeigen_bot import messages_flow
+from kleinanzeigen_bot import messages_flow, partner_profile
 from kleinanzeigen_bot.messages_flow import conversation_to_dict, preserve_existing_history
-from kleinanzeigen_bot.model.message_model import Conversation
+from kleinanzeigen_bot.model.message_model import Conversation, PartnerProfile
 from kleinanzeigen_bot.utils import dicts as _dicts
 
 
@@ -227,3 +227,110 @@ class TestSettleRemaining:
 
     def test_an_empty_conversation_needs_no_wait(self) -> None:
         assert messages_flow.settle_remaining(Conversation(id = "c1"), 120, datetime.now(UTC)) == 0
+
+
+_NOW = datetime(2026, 10, 5, 18, 0, tzinfo = UTC)
+
+
+class TestPartnerProfiles:
+
+    @pytest.fixture
+    def fetched(self, monkeypatch:pytest.MonkeyPatch) -> list[str]:
+        calls:list[str] = []
+
+        async def fake_fetch(user_id:str) -> PartnerProfile:
+            calls.append(user_id)
+            return PartnerProfile(satisfaction = "TOP", reply_rate_percent = 92)
+
+        monkeypatch.setattr(partner_profile, "fetch_partner_profile", fake_fetch)
+        return calls
+
+    @staticmethod
+    def _stored(tmp_path:Path, partner_id:str, fetched_at:datetime) -> Path:
+        target = tmp_path / "conversation_x.yaml"
+        _dicts.save_dict(target, {
+            "id": "x",
+            "partner_id": partner_id,
+            "partner_profile": {"fetched_at": fetched_at.isoformat(), "satisfaction": "Na ja"},
+        })
+        return target
+
+    async def test_a_new_partner_is_fetched_and_rendered(self, tmp_path:Path, fetched:list[str]) -> None:
+        profile = await messages_flow._PartnerProfiles(_NOW).get("23659", tmp_path / "missing.yaml")
+
+        assert fetched == ["23659"]
+        assert profile == {"fetched_at": "2026-10-05T18:00:00+00:00", "satisfaction": "TOP", "reply_rate_percent": 92}
+
+    async def test_a_partner_in_several_conversations_is_fetched_once(self, tmp_path:Path, fetched:list[str]) -> None:
+        profiles = messages_flow._PartnerProfiles(_NOW)
+
+        await profiles.get("23659", tmp_path / "a.yaml")
+        await profiles.get("23659", tmp_path / "b.yaml")
+
+        assert fetched == ["23659"]
+
+    async def test_a_fresh_stored_profile_is_reused(self, tmp_path:Path, fetched:list[str]) -> None:
+        target = self._stored(tmp_path, "23659", _NOW - timedelta(days = 2))
+
+        profile = await messages_flow._PartnerProfiles(_NOW).get("23659", target)
+
+        assert fetched == []
+        assert profile is not None
+        assert profile["satisfaction"] == "Na ja"
+
+    async def test_an_old_stored_profile_is_refreshed(self, tmp_path:Path, fetched:list[str]) -> None:
+        target = self._stored(tmp_path, "23659", _NOW - timedelta(days = 8))
+
+        profile = await messages_flow._PartnerProfiles(_NOW).get("23659", target)
+
+        assert fetched == ["23659"]
+        assert profile is not None
+        assert profile["satisfaction"] == "TOP"
+
+    async def test_a_stored_profile_of_someone_else_is_not_reused(self, tmp_path:Path, fetched:list[str]) -> None:
+        target = self._stored(tmp_path, "111", _NOW)
+
+        await messages_flow._PartnerProfiles(_NOW).get("23659", target)
+
+        assert fetched == ["23659"]
+
+    async def test_without_a_partner_id_nothing_is_fetched(self, tmp_path:Path, fetched:list[str]) -> None:
+        assert await messages_flow._PartnerProfiles(_NOW).get(None, tmp_path / "x.yaml") is None
+        assert fetched == []
+
+    async def test_a_failure_keeps_the_old_profile_and_stops_further_requests(
+        self, tmp_path:Path, monkeypatch:pytest.MonkeyPatch,
+    ) -> None:
+        calls:list[str] = []
+
+        async def failing_fetch(user_id:str) -> PartnerProfile:
+            calls.append(user_id)
+            raise partner_profile.PartnerProfileError("HTTP 403")
+
+        monkeypatch.setattr(partner_profile, "fetch_partner_profile", failing_fetch)
+        stale = self._stored(tmp_path, "23659", _NOW - timedelta(days = 30))
+        profiles = messages_flow._PartnerProfiles(_NOW)
+
+        kept = await profiles.get("23659", stale)
+        other = await profiles.get("29096672", tmp_path / "missing.yaml")
+
+        assert kept is not None
+        assert kept["satisfaction"] == "Na ja"
+        assert other is None
+        assert calls == ["23659"]
+
+
+class TestPartnerProfileToDict:
+
+    def test_unknown_values_are_left_out(self) -> None:
+        rendered = messages_flow.partner_profile_to_dict(
+            PartnerProfile(since = datetime(2009, 9, 1, 11, 33, tzinfo = UTC), satisfaction = "Na ja", score = 0.32),
+            _NOW,
+        )
+
+        assert rendered == {
+            "fetched_at": "2026-10-05T18:00:00+00:00",
+            "since": "2009-09-01",
+            "score": 0.32,
+            "satisfaction": "Na ja",
+        }

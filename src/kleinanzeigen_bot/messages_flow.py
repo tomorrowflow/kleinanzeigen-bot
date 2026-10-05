@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import asyncio
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from gettext import gettext as _
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
-from . import messagebox
-from .model.message_model import Conversation, Message, MessageDirection, MessageKind, Offer, PaymentState
+from . import messagebox, partner_profile
+from .model.message_model import Conversation, Message, MessageDirection, MessageKind, Offer, PartnerProfile, PaymentState
 from .utils import dicts as _dicts
 from .utils import loggers as _loggers
 from .utils import xdg_paths as _xdg_paths
@@ -31,8 +31,12 @@ if TYPE_CHECKING:
 
 LOG:Final[_loggers.Logger] = _loggers.get_logger(__name__)
 
+#: How long a fetched partner profile is reused before it is fetched again.
+#: Ratings move slowly, and one request per partner per sync would add up.
+PARTNER_PROFILE_MAX_AGE:Final[timedelta] = timedelta(days = 7)
 
-def conversation_to_dict(conversation:Conversation) -> dict[str, Any]:
+
+def conversation_to_dict(conversation:Conversation, partner_profile_dict:dict[str, Any] | None = None) -> dict[str, Any]:
     """Render a conversation for YAML output.
 
     Field order is chosen for reading: what the thread is about, then its state,
@@ -47,6 +51,8 @@ def conversation_to_dict(conversation:Conversation) -> dict[str, Any]:
         "ad_status": conversation.ad_status,
         "role": conversation.role.value if conversation.role else None,
         "partner": conversation.partner,
+        "partner_id": conversation.partner_id,
+        "partner_profile": partner_profile_dict,
         "unread": conversation.unread,
         "unread_count": conversation.unread_count,
         "last_received": conversation.last_received.isoformat() if conversation.last_received else None,
@@ -96,6 +102,83 @@ def _payment_to_dict(payment:PaymentState) -> dict[str, Any]:
         "seller_total_eur": payment.seller_total,
     }
     return {k: (float(v) if isinstance(v, Decimal) else v) for k, v in fields.items() if v is not None}
+
+
+def partner_profile_to_dict(profile:PartnerProfile, fetched_at:datetime) -> dict[str, Any]:
+    """Render a partner profile, dropping what the partner's account does not have."""
+    fields = {
+        "fetched_at": fetched_at.isoformat(timespec = "seconds"),
+        "since": profile.since.date().isoformat() if profile.since else None,
+        "poster_type": profile.poster_type,
+        "score": profile.score,
+        "satisfaction": profile.satisfaction,
+        "friendliness": profile.friendliness,
+        "reliability": profile.reliability,
+        "reply_rate_percent": profile.reply_rate_percent,
+        "reply_time": profile.reply_time,
+        "ads_online": profile.ads_online,
+        "ads_total": profile.ads_total,
+        "followers": profile.followers,
+        "secure_payment": profile.secure_payment,
+    }
+    return {k: v for k, v in fields.items() if v is not None}
+
+
+def stored_partner_profile(target:Path, partner_id:str) -> dict[str, Any] | None:
+    """The profile an existing conversation file holds for this partner, if any."""
+    if not target.is_file():
+        return None
+    try:
+        existing = _dicts.load_dict(str(target))
+    except Exception as ex:  # noqa: BLE001 - an unreadable file only means fetching again
+        LOG.debug("Could not read existing conversation file %s: %s", target, ex)
+        return None
+    profile = existing.get("partner_profile")
+    if str(existing.get("partner_id")) != partner_id or not isinstance(profile, dict):
+        return None
+    return profile
+
+
+def is_fresh(profile:dict[str, Any], now:datetime) -> bool:
+    """Whether a stored profile is younger than :data:`PARTNER_PROFILE_MAX_AGE`."""
+    try:
+        fetched_at = datetime.fromisoformat(str(profile.get("fetched_at")))
+    except ValueError:
+        return False
+    return fetched_at.tzinfo is not None and now - fetched_at <= PARTNER_PROFILE_MAX_AGE
+
+
+class _PartnerProfiles:
+    """Partner profiles for one sync run.
+
+    Each partner is fetched at most once per run, and a partner whose stored
+    profile is still fresh is not fetched at all. The first failed request ends
+    fetching for the rest of the run: the usual cause is the endpoint refusing
+    this connection, and then every further request would fail the same way.
+    A stale profile is kept rather than dropped when it cannot be refreshed.
+    """
+
+    def __init__(self, now:datetime) -> None:
+        self._now = now
+        self._fetched:dict[str, dict[str, Any]] = {}
+        self._disabled = False
+
+    async def get(self, partner_id:str | None, target:Path) -> dict[str, Any] | None:
+        if not partner_id:
+            return None
+        if partner_id in self._fetched:
+            return self._fetched[partner_id]
+        stored = await asyncio.to_thread(stored_partner_profile, target, partner_id)
+        if self._disabled or (stored is not None and is_fresh(stored, self._now)):
+            return stored
+        try:
+            profile = await partner_profile.fetch_partner_profile(partner_id)
+        except partner_profile.PartnerProfileError as ex:
+            LOG.warning("Could not fetch partner profiles, continuing without them: %s", ex)
+            self._disabled = True
+            return stored
+        self._fetched[partner_id] = partner_profile_to_dict(profile, self._now)
+        return self._fetched[partner_id]
 
 
 def preserve_existing_history(target:Path, payload:dict[str, Any]) -> dict[str, Any]:
@@ -285,6 +368,7 @@ async def sync_messages(
     _xdg_paths.ensure_directory(messages_dir, "messages directory")
 
     conversations:list[Conversation] = []
+    profiles = _PartnerProfiles(datetime.now(UTC))
     failed = 0
     for index, summary in enumerate(summaries, start = 1):
         conversation = Conversation.from_summary(summary)
@@ -305,7 +389,8 @@ async def sync_messages(
                 failed += 1
 
         target = messages_dir / conversation.filename
-        payload = await asyncio.to_thread(preserve_existing_history, target, conversation_to_dict(conversation))
+        profile = await profiles.get(conversation.partner_id, target)
+        payload = await asyncio.to_thread(preserve_existing_history, target, conversation_to_dict(conversation, profile))
         await asyncio.to_thread(_dicts.save_dict, target, payload)
         conversations.append(conversation)
 
