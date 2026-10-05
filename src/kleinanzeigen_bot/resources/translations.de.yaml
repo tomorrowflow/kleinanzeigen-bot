@@ -73,6 +73,8 @@ kleinanzeigen_bot/messages_flow.py:
 #################################################
   preserve_existing_history:
     "Could not read existing conversation file %s: %s": "Vorhandene Unterhaltungsdatei %s konnte nicht gelesen werden: %s"
+  get:
+    "Could not fetch partner profiles, continuing without them: %s": "Profile der Gesprächspartner konnten nicht abgerufen werden, es geht ohne sie weiter: %s"
   ensure_unchanged:
     ? "The conversation changed after the reply was drafted (newest message is now %s). Nothing was sent - sync, read and draft again."
     : "Die Unterhaltung hat sich geändert, nachdem die Antwort entworfen wurde (neueste Nachricht ist jetzt %s). Es wurde nichts gesendet - bitte synchronisieren, lesen und neu entwerfen."
@@ -93,6 +95,16 @@ kleinanzeigen_bot/messages_flow.py:
     "Fetching conversation %d/%d...": "Unterhaltung %d/%d wird abgerufen..."
     "Could not fetch conversation %s: %s": "Unterhaltung %s konnte nicht abgerufen werden: %s"
     "DONE: synced %s (%s unread, %s failed)": "FERTIG: %s synchronisiert (%s ungelesen, %s fehlgeschlagen)"
+
+#################################################
+kleinanzeigen_bot/partner_profile.py:
+#################################################
+  _get_profile:
+    "Profile request for user %s failed: %s": "Profilabruf für Nutzer %s fehlgeschlagen: %s"
+    "Profile request for user %s answered HTTP %s": "Profilabruf für Nutzer %s lieferte HTTP %s"
+    "Could not parse the profile of user %s: %s": "Profil von Nutzer %s konnte nicht gelesen werden: %s"
+  fetch_partner_profile:
+    "Unexpected profile payload for user %s": "Unerwartete Profilantwort für Nutzer %s"
 
 #################################################
 kleinanzeigen_bot/ad_stats.py:

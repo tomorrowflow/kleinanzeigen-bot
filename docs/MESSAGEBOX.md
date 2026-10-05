@@ -80,6 +80,19 @@ ad_id: '3210987654'
 ad_title: Moulinex Super Uno Fritteuse
 role: SELLER          # this account's role
 partner: Erika        # the other party
+partner_id: '23659'   # the other party's user id
+partner_profile:      # their public reputation, see "Partner profile" below
+  fetched_at: '2026-10-05T18:00:00+00:00'
+  since: '2009-09-01'
+  poster_type: PRIVATE
+  score: 0.32               # average rating, 0 (worst) to 1 (best)
+  satisfaction: Na ja       # Zufriedenheit: Na ja < OK < TOP
+  reply_rate_percent: 81
+  reply_time: 6h
+  ads_online: 15
+  ads_total: 2400
+  followers: 47
+  secure_payment: true
 unread: true
 unread_count: 2
 last_received: '2026-09-25T14:21:39.123000+02:00'
@@ -134,6 +147,29 @@ that commits real money, and it stays a human action.
 
 Messages are ordered oldest first, so a file reads as a transcript. The API
 returns them newest first.
+
+## Partner profile
+
+The mobile apps show the other party's reputation - Zufriedenheit, Freundlichkeit,
+Zuverlässigkeit, Antwortrate, Antwortzeit - but the web message box never requests
+it. `messages` reads it from the app API's public profile, which needs no login:
+
+```
+GET https://api.kleinanzeigen.de/api/users/public/{userId}/profile
+    Authorization: Basic <the Android app's client id>
+```
+
+`{userId}` is `userIdBuyer` or `userIdSeller` from the conversation, whichever is
+not this account. The request goes out directly rather than through the browser,
+because the site's pages cannot `fetch()` that host cross-origin.
+
+Every badge is optional on its own: accounts without enough ratings lack it, and
+a key missing from `partner_profile` means unknown, not bad. `friendliness` runs
+Freundlich < Sehr freundlich < Besonders freundlich, `reliability` likewise.
+
+A profile is reused for 7 days, and each partner is fetched at most once per run.
+The first failed request ends fetching for that run and keeps whatever profile the
+file already had, so a refused or unreachable endpoint never fails the sync.
 
 ## How it talks to the site
 

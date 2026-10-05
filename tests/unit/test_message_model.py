@@ -17,6 +17,7 @@ from kleinanzeigen_bot.model.message_model import (
     Message,
     MessageDirection,
     MessageKind,
+    PartnerProfile,
     PaymentState,
     conversation_filename,
 )
@@ -30,6 +31,8 @@ def _summary(**overrides:Any) -> dict[str, Any]:
         "role": "SELLER",
         "buyerName": "Erika",
         "sellerName": "Frank",
+        "userIdBuyer": 23659,
+        "userIdSeller": 32492084,
         "unread": True,
         "unreadMessagesCount": 2,
         "receivedDate": "2026-09-25T14:21:39.123+0200",
@@ -60,16 +63,23 @@ class TestConversationFromSummary:
         assert conversation.last_received is not None
 
     def test_the_partner_is_the_buyer_when_this_account_sells(self) -> None:
-        assert Conversation.from_summary(_summary(role = "SELLER")).partner == "Erika"
+        conversation = Conversation.from_summary(_summary(role = "SELLER"))
+
+        assert conversation.partner == "Erika"
+        assert conversation.partner_id == "23659"
 
     def test_the_partner_is_the_seller_when_this_account_buys(self) -> None:
-        assert Conversation.from_summary(_summary(role = "BUYER")).partner == "Frank"
+        conversation = Conversation.from_summary(_summary(role = "BUYER"))
+
+        assert conversation.partner == "Frank"
+        assert conversation.partner_id == "32492084"
 
     def test_an_unknown_role_is_tolerated_rather_than_fatal(self) -> None:
         conversation = Conversation.from_summary(_summary(role = "MODERATOR"))
 
         assert conversation.role is None
         assert conversation.partner is None
+        assert conversation.partner_id is None
 
     def test_a_summary_carries_no_message_history(self) -> None:
         assert Conversation.from_summary(_summary()).messages == []
@@ -345,3 +355,62 @@ class TestPaymentState:
         # kleinanzeigen pauses the ad itself once the item sells.
         assert conversation.ad_status == "PAUSED"
         assert conversation.payment is not None
+
+
+class TestPartnerProfile:
+    """Shapes follow ``/api/users/public/{id}/profile`` as captured on 2026-10-05."""
+
+    def test_a_rated_account_maps_every_badge(self) -> None:
+        profile = PartnerProfile.from_api({
+            "id": "32492084",
+            "userSince": "2015-08-07T17:54:47.000+0200",
+            "posterType": "PRIVATE",
+            "counters": {"historicalAds": 173, "onlineAds": 33, "followers": 1},
+            "replyIndicators": {"replySpeed": "3h"},
+            "userBadges": {"badges": [
+                {"name": "rating", "level": 2, "value": ""},
+                {"name": "friendliness", "level": 2, "value": ""},
+                {"name": "reliability", "level": 1, "value": ""},
+                {"name": "replyRate", "level": 2, "value": "92%"},
+                {"name": "replySpeed", "level": 1, "value": "3h"},
+                {"name": "followers", "level": 0, "value": "1"},
+            ]},
+            "userRatings": {"averageRating": 0.9285714285714286},
+            "securePayment": True,
+        })
+
+        assert profile.since is not None
+        assert profile.since.year == 2015
+        assert profile.poster_type == "PRIVATE"
+        assert profile.score == 0.93
+        assert profile.satisfaction == "TOP"
+        assert profile.friendliness == "Besonders freundlich"
+        assert profile.reliability == "Sehr zuverlässig"
+        assert profile.reply_rate_percent == 92
+        assert profile.reply_time == "3h"
+        assert (profile.ads_online, profile.ads_total, profile.followers) == (33, 173, 1)
+        assert profile.secure_payment is True
+
+    def test_badges_an_account_does_not_have_stay_unknown(self) -> None:
+        # Badges come and go independently: this account has a satisfaction
+        # rating but neither friendliness nor reliability, and no reply data.
+        profile = PartnerProfile.from_api({
+            "userBadges": {"badges": [{"name": "rating", "level": 0, "value": ""}]},
+            "replyIndicators": {},
+            "userRatings": {"averageRating": 0.31919642857142855},
+        })
+
+        assert profile.satisfaction == "Na ja"
+        assert profile.score == 0.32
+        assert profile.friendliness is None
+        assert profile.reliability is None
+        assert profile.reply_rate_percent is None
+        assert profile.reply_time is None
+
+    def test_an_unexpected_badge_level_is_reported_rather_than_dropped(self) -> None:
+        profile = PartnerProfile.from_api({"userBadges": {"badges": [{"name": "rating", "level": 3}]}})
+
+        assert profile.satisfaction == "level 3"
+
+    def test_an_empty_profile_is_tolerated(self) -> None:
+        assert PartnerProfile.from_api({}) == PartnerProfile()

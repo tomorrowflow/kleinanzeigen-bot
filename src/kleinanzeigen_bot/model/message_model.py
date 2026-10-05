@@ -208,6 +208,7 @@ class Conversation(ContextualModel):
     ad_title:str | None = Field(default = None, description = "title of the ad at the time of sync")
     role:ConversationRole | None = Field(default = None, description = "this account's role in the conversation")
     partner:str | None = Field(default = None, description = "display name of the other party")
+    partner_id:str | None = Field(default = None, description = "numeric user id of the other party")
     unread:bool = Field(default = False, description = "whether the conversation has unread messages")
     unread_count:int = Field(default = 0, description = "number of unread messages")
     last_received:datetime | None = Field(default = None, description = "timestamp of the most recent message")
@@ -234,6 +235,7 @@ class Conversation(ContextualModel):
             ad_title = _optional_str(payload.get("adTitle")),
             role = role,
             partner = _partner_name(payload, role),
+            partner_id = _partner_id(payload, role),
             unread = bool(payload.get("unread")),
             unread_count = int(payload.get("unreadMessagesCount") or 0),
             last_received = payload.get("receivedDate"),
@@ -254,6 +256,7 @@ class Conversation(ContextualModel):
         return self.model_copy(update = {
             "role": role,
             "partner": _partner_name(payload, role) or self.partner,
+            "partner_id": _partner_id(payload, role) or self.partner_id,
             "ad_id": _optional_str(payload.get("adId")) or self.ad_id,
             "ad_title": _optional_str(payload.get("adTitle")) or self.ad_title,
             "ad_status": _optional_str(payload.get("adStatus")) or self.ad_status,
@@ -305,3 +308,85 @@ def _partner_name(payload:dict[str, Any], role:ConversationRole | None) -> str |
     if role == ConversationRole.BUYER:
         return _optional_str(payload.get("sellerName"))
     return None
+
+
+def _partner_id(payload:dict[str, Any], role:ConversationRole | None) -> str | None:
+    """The other party's numeric user id, which side depends on this account's role."""
+    if role == ConversationRole.SELLER:
+        return _optional_str(payload.get("userIdBuyer"))
+    if role == ConversationRole.BUYER:
+        return _optional_str(payload.get("userIdSeller"))
+    return None
+
+
+#: The site's wording for each badge level, lowest first.
+_BADGE_LABELS:Final[dict[str, tuple[str, ...]]] = {
+    "rating": ("Na ja", "OK", "TOP"),
+    "friendliness": ("Freundlich", "Sehr freundlich", "Besonders freundlich"),
+    "reliability": ("Zuverlässig", "Sehr zuverlässig", "Besonders zuverlässig"),
+}
+
+
+class PartnerProfile(ContextualModel):
+    """The public reputation of the other party, as the mobile apps show it.
+
+    The web message box never shows these figures; they come from the app API's
+    public profile. Every badge is optional on its own: accounts without enough
+    ratings simply lack it, so a missing value means unknown, not bad.
+    """
+
+    since:datetime | None = Field(default = None, description = "registration date (Aktiv seit)")
+    poster_type:str | None = Field(default = None, description = "PRIVATE or COMMERCIAL")
+    score:float | None = Field(default = None, description = "average rating, 0 (worst) to 1 (best)")
+    satisfaction:str | None = Field(default = None, description = "Zufriedenheit badge: Na ja, OK or TOP")
+    friendliness:str | None = Field(default = None, description = "Freundlichkeit badge")
+    reliability:str | None = Field(default = None, description = "Zuverlässigkeit badge")
+    reply_rate_percent:int | None = Field(default = None, description = "Antwortrate")
+    reply_time:str | None = Field(default = None, description = "usual reply time, e.g. 3h")
+    ads_online:int | None = Field(default = None, description = "currently active ads")
+    ads_total:int | None = Field(default = None, description = "ads ever posted")
+    followers:int | None = Field(default = None, description = "number of followers")
+    secure_payment:bool | None = Field(default = None, description = "whether the account uses Sicher bezahlen")
+
+    @classmethod
+    def from_api(cls, payload:dict[str, Any]) -> PartnerProfile:
+        """Build a profile from ``GET /api/users/public/{id}/profile``."""
+        badges:dict[str, dict[str, Any]] = {
+            str(badge["name"]): badge
+            for badge in (payload.get("userBadges") or {}).get("badges") or []
+            if isinstance(badge, dict) and badge.get("name")
+        }
+        counters = payload.get("counters") or {}
+        reply = payload.get("replyIndicators") or {}
+        score = (payload.get("userRatings") or {}).get("averageRating")
+        reply_rate = _optional_str((badges.get("replyRate") or {}).get("value") or reply.get("replyRate"))
+        secure_payment = payload.get("securePayment")
+        return cls(
+            since = payload.get("userSince"),
+            poster_type = _optional_str(payload.get("posterType")),
+            score = round(float(score), 2) if isinstance(score, (int, float)) else None,
+            satisfaction = _badge_label(badges, "rating"),
+            friendliness = _badge_label(badges, "friendliness"),
+            reliability = _badge_label(badges, "reliability"),
+            reply_rate_percent = _optional_int(reply_rate.rstrip("%")) if reply_rate else None,
+            reply_time = _optional_str((badges.get("replySpeed") or {}).get("value") or reply.get("replySpeed")),
+            ads_online = _optional_int(counters.get("onlineAds")),
+            ads_total = _optional_int(counters.get("historicalAds")),
+            followers = _optional_int(counters.get("followers")),
+            secure_payment = secure_payment if isinstance(secure_payment, bool) else None,
+        )
+
+
+def _badge_label(badges:dict[str, dict[str, Any]], name:str) -> str | None:
+    level = _optional_int((badges.get(name) or {}).get("level"))
+    if level is None:
+        return None
+    labels = _BADGE_LABELS[name]
+    return labels[level] if 0 <= level < len(labels) else f"level {level}"
+
+
+def _optional_int(value:Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
