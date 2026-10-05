@@ -222,6 +222,8 @@ Commands:
   reply    - sends a reply into a conversation (publicly visible)
   mark-read - marks a conversation as read
   messages-probe - records the network calls made by the message box (diagnostic, changes nothing)
+  stats    - records views, watchers and price of all published ads to a history file (changes nothing)
+  ads-probe - records the network calls made by the ad overview, e.g. views/watchers (diagnostic, changes nothing)
   status   - shows ad status and APR preview details
   --
   help     - displays this help (default command)
@@ -266,7 +268,7 @@ Options:
   --conversations=<N> (messages-probe) - how many conversations to open (DEFAULT: 1)
   --watch=<SECONDS> (messages-probe) - only record and wait while a human drives the browser;
         captures actions the bot should not perform itself (e.g. sending a message)
-  --include-raw-bodies (messages-probe) - additionally write the unredacted response bodies;
+  --include-raw-bodies (messages-probe, ads-probe) - additionally write the unredacted response bodies;
         these contain private messages and must not be shared
   --force           - alias for '--ads=all'
   --keep-old        - don't delete old ads on republication
