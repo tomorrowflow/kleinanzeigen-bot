@@ -89,6 +89,7 @@ def ad_stats_entry(ad:_published_ads.PublishedAd) -> dict[str, Any]:
         "id": _int_or_none(ad.get("id")),
         "title": html.unescape(title) if isinstance(title, str) else None,
         "state": ad.get("state"),
+        "category": ad.get("category"),
         "price_eur": parse_price_eur(ad.get("price")),
         "price_text": ad.get("price"),
         "price_type": ad.get("adPriceType"),
