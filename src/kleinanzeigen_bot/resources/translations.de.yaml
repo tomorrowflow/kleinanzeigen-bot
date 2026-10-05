@@ -95,6 +95,14 @@ kleinanzeigen_bot/messages_flow.py:
     "DONE: synced %s (%s unread, %s failed)": "FERTIG: %s synchronisiert (%s ungelesen, %s fehlgeschlagen)"
 
 #################################################
+kleinanzeigen_bot/ad_stats.py:
+#################################################
+  record_ad_stats:
+    "ad": "Anzeige"
+    "Fetching ad statistics...": "Anzeigenstatistik wird abgerufen..."
+    "DONE: recorded statistics for %s to %s": "FERTIG: Statistik für %s in %s gespeichert"
+
+#################################################
 kleinanzeigen_bot/ads_probe.py:
 #################################################
   probe_ads_overview:

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 
 import certifi
 
-from . import ad_loading, ad_status, ads_probe, delete_flow, download_flow, extend_flow, messagebox, messagebox_probe, messages_flow, reserve_flow
+from . import ad_loading, ad_stats, ad_status, ads_probe, delete_flow, download_flow, extend_flow, messagebox, messagebox_probe, messages_flow, reserve_flow
 from . import login_flow as _login_flow
 from . import publishing_workflow as _publishing_workflow
 from . import runtime_config as _runtime_config
@@ -28,6 +28,7 @@ from .utils.misc import is_frozen
 from .utils.web_scraping_mixin import WebScrapingMixin
 
 if TYPE_CHECKING:
+    from .cli import ParsedArgs
     from .utils.timing_collector import TimingCollector
 
 # W0406: possibly a bug, see https://github.com/PyCQA/pylint/issues/3933
@@ -98,9 +99,8 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
     def _update_check_state_path(self) -> Path:
         return self._workspace_or_raise().state_dir / "update_check_state.json"
 
-    async def run(self, args:list[str]) -> None:
-        _cli = importlib.import_module("kleinanzeigen_bot.cli")
-        parsed = _cli.parse_args(args)
+    def _apply_parsed_args(self, parsed:"ParsedArgs") -> None:
+        """Copy the parsed command line onto the bot."""
         self.command = parsed.command
         self.ads_selector = parsed.ads_selector
         self._ads_selector_explicit = parsed.ads_selector_explicit
@@ -124,6 +124,11 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
             self.config_file_path = parsed.config_file_path
         if parsed.logfile_explicitly_provided:
             self.log_file_path = parsed.log_file_path
+
+    async def run(self, args:list[str]) -> None:
+        _cli = importlib.import_module("kleinanzeigen_bot.cli")
+        parsed = _cli.parse_args(args)
+        self._apply_parsed_args(parsed)
 
         self.workspace = _runtime_config.resolve_workspace(
             command = self.command,
@@ -178,6 +183,8 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
                     await self._handle_messages_probe()
                 case "ads-probe":
                     await self._handle_ads_probe()
+                case "stats":
+                    await self._handle_stats()
                 case "reply":
                     await self._handle_reply()
                 case "mark-read":
@@ -510,6 +517,17 @@ class KleinanzeigenBot(WebScrapingMixin):  # noqa: PLR0904
             conversations = self._probe_conversations,
             include_raw_bodies = self._probe_include_raw_bodies,
             watch_seconds = self._probe_watch_seconds,
+        )
+
+    async def _handle_stats(self) -> None:
+        """Append a views/watchers/price snapshot of all published ads to the history file."""
+        self._bootstrap_runtime()
+        self._check_for_updates()
+        await self._open_logged_in_browser()
+        await ad_stats.record_ad_stats(
+            self,
+            root_url = self.root_url,
+            stats_file = self._workspace_or_raise().config_dir / ad_stats.STATS_FILENAME,
         )
 
     async def _handle_ads_probe(self) -> None:

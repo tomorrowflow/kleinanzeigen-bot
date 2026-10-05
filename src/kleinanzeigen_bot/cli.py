@@ -155,6 +155,7 @@ def help_text(*, executable:str | None = None, language:str | None = None) -> st
               reply    - Sendet eine Antwort in eine Unterhaltung (öffentlich wirksam)
               mark-read - Markiert eine Unterhaltung als gelesen
               messages-probe - Zeichnet die Netzwerkaufrufe des Nachrichten-Postfachs auf (Diagnose, ändert nichts)
+              stats    - Speichert Aufrufe, Beobachter und Preis aller veröffentlichten Anzeigen als Verlauf (ändert nichts)
               ads-probe - Zeichnet die Netzwerkaufrufe der Anzeigenübersicht auf, z. B. Aufrufe/Beobachter (Diagnose, ändert nichts)
               status   - Zeigt Anzeigenstatus und APR-Vorschau an
               --
@@ -237,6 +238,7 @@ def help_text(*, executable:str | None = None, language:str | None = None) -> st
           reply    - sends a reply into a conversation (publicly visible)
           mark-read - marks a conversation as read
           messages-probe - records the network calls made by the message box (diagnostic, changes nothing)
+          stats    - records views, watchers and price of all published ads to a history file (changes nothing)
           ads-probe - records the network calls made by the ad overview, e.g. views/watchers (diagnostic, changes nothing)
           status   - shows ad status and APR preview details
           --

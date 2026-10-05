@@ -222,6 +222,7 @@ Commands:
   reply    - sends a reply into a conversation (publicly visible)
   mark-read - marks a conversation as read
   messages-probe - records the network calls made by the message box (diagnostic, changes nothing)
+  stats    - records views, watchers and price of all published ads to a history file (changes nothing)
   ads-probe - records the network calls made by the ad overview, e.g. views/watchers (diagnostic, changes nothing)
   status   - shows ad status and APR preview details
   --
