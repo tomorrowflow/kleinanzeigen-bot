@@ -431,7 +431,6 @@ class TestWebScrapingErrorHandling:
         with (
             patch.object(web_scraper, "web_execute", mock_execute),
             patch.object(web_scraper, "_resize_viewport_after_open", new_callable = AsyncMock),
-            patch.object(web_scraper, "_warn_if_viewport_too_narrow", new_callable = AsyncMock),
         ):
             await web_scraper.web_open("https://example.com", timeout = 1)
 

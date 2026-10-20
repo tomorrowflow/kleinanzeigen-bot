@@ -910,6 +910,36 @@ class TestRedesignedCategoryDialog:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
+    async def test_category_dialog_resolves_generic_leaf_to_weiteres_label(self, test_bot:KleinanzeigenBot) -> None:
+        """'161/225/sonstiges' has no leaf name in categories.yaml; the dialog calls it 'Weiteres PC-Zubehör'."""
+        categories = {
+            "Elektronik > PC-Zubehör & Software": "161/225/sonstiges",
+            "Elektronik > PC-Zubehör & Software > Software": "161/225/software",
+        }
+        leaf_candidates = _category_dialog_label_options("161/225/sonstiges", categories)[2]
+        labels = ["Drucker & Scanner", "Grafikkarten", "Software", "Tastatur & Maus", "Weiteres PC-Zubehör"]
+        buttons = []
+        for label in labels:
+            button = MagicMock()
+            button.click = AsyncMock()
+            button.visible_text = label
+            buttons.append(button)
+
+        async def visible_text(button:Element) -> str:
+            return str(button.visible_text)
+
+        with (
+            patch.object(test_bot, "web_find_all", new_callable = AsyncMock, return_value = buttons),
+            patch.object(test_bot, "extract_visible_text", new_callable = AsyncMock, side_effect = visible_text),
+            patch.object(test_bot, "web_sleep", new_callable = AsyncMock),
+        ):
+            selected = await _click_category_dialog_level(test_bot, "dialog[open]", "161/225/sonstiges", 2, leaf_candidates)
+
+        assert selected == "Weiteres PC-Zubehör"
+        assert [b.visible_text for b in buttons if b.click.await_count] == ["Weiteres PC-Zubehör"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_category_dialog_timeout_verifying_leaf_becomes_resolution_error(
         self,
         test_bot:KleinanzeigenBot,
@@ -1030,7 +1060,6 @@ class TestRedesignedCategoryDialog:
             patch.object(test_bot, "web_find_all", new_callable = AsyncMock, side_effect = find_all),
             patch.object(test_bot, "extract_visible_text", new_callable = AsyncMock, side_effect = visible_text),
             patch.object(test_bot, "web_click", new_callable = AsyncMock),
-            patch.object(test_bot, "page_layout_summary", new_callable = AsyncMock, return_value = ""),
             patch.object(test_bot, "web_sleep", new_callable = AsyncMock),
             patch.object(test_bot, "web_find", new_callable = AsyncMock) as mock_find,
         ):
